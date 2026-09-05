@@ -11,6 +11,7 @@ import { test } from 'node:test'
 import { createConscriptor } from '../src/index.ts'
 import type { SessionsApiFace, WorkspaceApiFace } from '../src/relay.ts'
 import { appendEvent, loadCampaign } from '../src/events.ts'
+import { appendDirectiveEvent } from '../src/directives.ts'
 import { rescueNudgeFor } from '../src/prompts.ts'
 
 function tmpStateDir(): string {
@@ -205,6 +206,63 @@ test('件⑤: 判死回栏后 forget 清 rescue 拒因——GC 覆盖 rescue 表
     assert.equal(loadCampaign(dir, 't2').status, 'published')
     rig.commander.forget('t2')
     assert.equal(rig.commander.snapshot().skips.t2, undefined, '终态 GC 清拒因')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('sd 批E: 参谋侧冷恢复——received 命令大副会话搁浅被 resume+续行提示入队', async () => {
+  const dir = tmpStateDir()
+  try {
+    const resumed: string[] = []
+    const rig = makeRig(dir, {
+      resolveAgent: () => undefined, // 大副会话无活体（宿主重启）
+      resumeAgent: async id => { resumed.push(id); return {} },
+    })
+    // 种一条 received 命令（分诊到一半搁浅的形态）
+    appendDirectiveEvent(dir, { type: 'directive_created', ts: '2026-01-01T00:00:00Z', directiveId: 'cmd-s1', text: '搁浅考题' })
+    appendDirectiveEvent(dir, { type: 'directive_received', ts: '2026-01-01T00:00:30Z', directiveId: 'cmd-s1', staffSessionId: 'sec-s1' })
+    await rig.commander.patrolNow()
+    assert.ok(resumed.includes('sec-s1'), `大副会话应被 resume：${JSON.stringify(resumed)}`)
+    const nudge = rig.faces.calls.prompts.find(p => p.sessionId === 'sec-s1')
+    assert.ok(nudge !== undefined, '续行提示应入队')
+    assert.match(nudge.text, /续行/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('sd 批E: plan 待批的命令不催（在等舰长定夺，非搁浅）', async () => {
+  const dir = tmpStateDir()
+  try {
+    const resumed: string[] = []
+    const rig = makeRig(dir, {
+      resolveAgent: () => undefined,
+      resumeAgent: async id => { resumed.push(id); return {} },
+    })
+    appendDirectiveEvent(dir, { type: 'directive_created', ts: '2026-01-01T00:00:00Z', directiveId: 'cmd-s2', text: '计划待批考题' })
+    appendDirectiveEvent(dir, { type: 'directive_received', ts: '2026-01-01T00:00:30Z', directiveId: 'cmd-s2', staffSessionId: 'sec-s2' })
+    appendDirectiveEvent(dir, { type: 'directive_plan_opened', ts: '2026-01-01T00:01:00Z', directiveId: 'cmd-s2', plan: '1) 方案' })
+    await rig.commander.patrolNow()
+    assert.equal(resumed.includes('sec-s2'), false, 'plan 待批不该 resume（不是搁浅）')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('sd 批E: 大副会话活体豁免；draft 命令不走参谋 rescue（relay 本职）', async () => {
+  const dir = tmpStateDir()
+  try {
+    const resumed: string[] = []
+    const rig = makeRig(dir, {
+      resolveAgent: id => (id === 'sec-live' ? { live: true } : undefined),
+      resumeAgent: async id => { resumed.push(id); return {} },
+    })
+    appendDirectiveEvent(dir, { type: 'directive_created', ts: '2026-01-01T00:00:00Z', directiveId: 'cmd-s3', text: '活体考题' })
+    appendDirectiveEvent(dir, { type: 'directive_received', ts: '2026-01-01T00:00:30Z', directiveId: 'cmd-s3', staffSessionId: 'sec-live' })
+    appendDirectiveEvent(dir, { type: 'directive_created', ts: '2026-01-01T00:01:00Z', directiveId: 'cmd-s4', text: 'draft 考题' })
+    await rig.commander.patrolNow()
+    assert.equal(resumed.length, 0, '活体豁免；draft 无 staffSessionId 不进 rescue')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

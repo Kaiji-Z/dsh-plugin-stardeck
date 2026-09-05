@@ -922,3 +922,7 @@ map 态竖干不再贯通任务卡位：下行段到任务卡**入端口**（右
 **保留辨析**：收件箱 clarify 跳会话保留（澄清的定夺点本就是对话，收件箱是决策清单非卡面）；聚焦页内部两处 handle（任务段/报告段 subActions）直跳会话保留（已在定夺面内部）；`focusPage.talkingEnterBtn` 键保留（聚焦页 talking ghost 面板仍用，verify「进入对话回答」针脚续绿）。
 
 **联动面**：verify 针脚 :240/:266/:267/:389 设计上零影响；e2e 三件套零涉及；shoot-v7「改直发」正断言翻转为退役负断言。
+
+## 批E 冷恢复桥·参谋侧接线（2026-09-05，守护态加固）
+
+**挂账兑现口径**：V10 R2 spike 定案「冷会话 prompt=agents.resume 官方续接通道」，原挂账「deepen 会话级接线」中，执行侧（in_progress 死会话 rescue）B1-件⑤已接线、relay 草稿重试+queue 持久重放本就自愈；唯一真空=**参谋侧搁浅**——relay 只重试 draft，宿主重启时正分诊到一半的 received/talking 命令没人 resume 大副会话，永久搁浅。本批接线：patrolNow 增参谋侧 rescue（resolveAgent 判死→resumeAgent 续命+staffRescueNudgeFor 续行提示入队，持久队列自动重放舰长已入队的答问；连败 ≥2 记拒因留置——命令未成形任务无回栏语义；plan 待批不催=在等舰长定夺非搁浅；面缺席降级只记不动作）。deepen 复用父参谋会话的「会话级续接」仍按 V10 v1 定案走战线档案保上下文（每命令一会话征召制不破）。机测 +3（搁浅 resume+提示入队/plan 待批豁免/活体与 draft 豁免）。

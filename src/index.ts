@@ -26,7 +26,7 @@ import { appendDirectiveEvent, dueScheduledDirectives, foldChains, loadDirective
 import { buildCommanderChainBrief, type ChainAncestor } from './chain-note.ts'
 import { readDossier } from './dossier.ts'
 import { staffPersonaText } from './persona.ts'
-import { commanderOrderFor, rescueNudgeFor } from './prompts.ts'
+import { commanderOrderFor, rescueNudgeFor, staffRescueNudgeFor } from './prompts.ts'
 import { createCommandFuse, type SessionsApiFace, type WorkspaceApiFace } from './relay.ts'
 import { createWakeEngine } from './wake.ts'
 import { createQuotaFuse, probeBackoffMs } from './quota.ts'
@@ -145,6 +145,9 @@ function createConscriptor(deps: {
   // B1-件⑤ 死会话 rescue：resume 连续失败计数（跨巡检轮）——≥2 才判死回栏
   //（回栏烧 attempt，persistence 后端打嗝不该烧）；成功即清零。
   const rescueFailures = new Map<string, number>()
+  // sd 批E：参谋侧 rescue 的连败计数与在途守卫
+  const staffRescueFailures = new Map<string, number>()
+  const rescuingStaff = new Set<string>()
   const rescuing = new Set<string>()
   const runConscript = async (task: CampaignState, signal: AbortSignal): Promise<{ spawned: true; childId: string } | { spawned: false; reason: string }> => {
     if (task.status !== 'published') return { spawned: false, reason: `任务状态为 ${task.status}，只有待领取任务可征召。` }
@@ -314,6 +317,52 @@ function createConscriptor(deps: {
               }
             } finally {
               rescuing.delete(t.campaignId)
+            }
+          }
+        }
+        // ── sd 批E 冷恢复桥（参谋侧）───────────────────────────────────
+        // received/talking 且大副会话无活体 = 搁浅（relay 只重试 draft——宿主
+        // 重启时正分诊到一半的命令没人续，会永久搁浅）。R2 定案：冷会话
+        // prompt=agents.resume 官方续接通道；resume 后持久队列自动重放存量
+        // 输入（含舰长已入队的答问），空队列由续行提示兜底防空转。plan 待批
+        // 的不催（在等舰长定夺，不是搁浅）。连败 ≥2 只记拒因留置（无回栏语义
+        // ——命令还没成形任务）。
+        if (deps.resolveAgent !== undefined) {
+          for (const d of loadDirectives(deps.stateDir)) {
+            if ((d.status !== 'received' && d.status !== 'talking') || d.staffSessionId === undefined) continue
+            if (d.plan !== undefined && d.plan.status === 'pending') continue
+            if (rescuingStaff.has(d.id)) continue
+            let live = false
+            try {
+              const agent = deps.resolveAgent(d.staffSessionId)
+              live = agent !== undefined && agent !== null
+            } catch {
+              live = false
+            }
+            if (live) {
+              staffRescueFailures.delete(d.id)
+              continue
+            }
+            rescuingStaff.add(d.id)
+            try {
+              if (deps.resumeAgent === undefined) {
+                noteSkip(d.id, '参谋会话无活体（宿主无 agents.resume 面——留置等舰长/会话重开）')
+                continue
+              }
+              await deps.resumeAgent(d.staffSessionId)
+              staffRescueFailures.delete(d.id)
+              lastSkip.delete(d.id)
+              void relay.prompt({ rpcId: rpc(), payload: { sessionId: d.staffSessionId, mode: 'queue', content: [{ type: 'text', text: staffRescueNudgeFor(d.id) }] } }).catch(() => undefined)
+              console.log(`[warroom] 死会话 rescue：命令 ${d.id} 参谋会话 ${d.staffSessionId} 已 resume 续行`)
+            } catch (err) {
+              const n = (staffRescueFailures.get(d.id) ?? 0) + 1
+              staffRescueFailures.set(d.id, n)
+              const why = err instanceof Error ? err.message : String(err)
+              if (n >= 2) {
+                noteSkip(d.id, `参谋会话失联（resume 连败 ${n} 次：${why.slice(0, 120)}）——留置等舰长处置`)
+              }
+            } finally {
+              rescuingStaff.delete(d.id)
             }
           }
         }

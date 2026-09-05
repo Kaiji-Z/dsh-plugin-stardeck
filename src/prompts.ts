@@ -105,6 +105,12 @@ export function rescueNudgeFor(taskId: string): string {
   return `【续行】你的执行会话曾被冻结、现已恢复。核对任务书与验收标准（war_board 可查任务 ${taskId} 全文）继续执行；上下文若有缺口，读工作区现状接着做，不重做已完成的部分。确实无法继续就 war_fail 附一句人话原因。`
 }
 
+/** sd 批E 冷恢复桥（参谋侧）：patrol 对搁浅的 received/talking 命令 resume 大副
+ *  会话成功后入队——空队列（崩溃时正在回合中）也有事可做，且不重做已完成的分诊。 */
+export function staffRescueNudgeFor(directiveId: string): string {
+  return `【续行】你的大副会话曾被冻结、现已恢复。先用 war_board 核对命令 ${directiveId} 的现状：若你上一轮已呈问题或计划（决策卡在板上等着），不要重做分诊——按卡上现状继续等舰长定夺或补呈；若分诊/起草确实做了一半，接着做完。`
+}
+
 /** 从挂链任务折出一行近况（纯；结构性切片，deepen/retry 的征召注入用）。 */
 export function chainOutcomeOf(task?: { status: TaskStatus; lastError?: string; closedVerdict?: string }): string {
   if (task === undefined) return '未成形（尚未发布成任务）'

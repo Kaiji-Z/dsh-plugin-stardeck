@@ -19,17 +19,16 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 ### Added
 - **收件箱批量定夺（批D，舰长令「逐条快览+批量批/驳」）**：岛收件箱面板的 plan 行新增复选框（悬停 title 快览计划原文全文），勾选即出批量栏「批准所选(N)/驳回所选(N)/取消选择」——写口仍是逐条 `decidePlan` 既有合法 API（客户端顺序循环，账本事件语义零改动，读投影红线不破）；部分失败给「N 条处理失败，其余已生效」提示，成功静默刷新（与 actNote 同口径）。状态与处理器在 WarView、经 `inboxBatch` props 透传 WarIsland→InboxStrip（组件无 hook 违例）。词典 inbox 增 5 键（batchApprove/batchReject/batchClear/batchSelTitle/batchFail，三皮肤+EN 键形锁过）。DOM 探针 scripts/probe-sd-batch.py 4/4：复选/批量栏/快览/恰好 2 条 plan approved 且零错误。
 - **大账本性能基线回归（批C）**：`scripts/seed-bulk.py`（在演示板之上追加 N 条批量命令，五档状态分布 55/15/10/10/10，events 与 seed-playground 同格式）+ `scripts/probe-perf.py`（board API 延迟体积/冷挂载/页签切换/聚焦页四项，追加写 `.goal/evidence/perf/baseline.md`）。500 命令（522 cmd/463 task）实测：API 197-210ms/727KB、冷挂载 2.8-3.6s、页签 141-226ms、聚焦 40-53ms（对照 ~20 命令 12ms/513ms/52ms/41ms）——线性无断崖，三个月量级可用，优化阈值与首刀方案记 baseline.md。
+- **雷达四态读数抽纯函数 `tacStatusWord`**（自绘制壳内联表达式升格，tests 管辖）：active/settled/idle 走词典、failed 给 ✕N（无败记兜 1）——tests/starfield3d 补四态断言（含 ✕1 兜底与 ✕N 败记数），「雷达四态测试」判据至此完整。AGENTS 坑录补 sd 回流四坑（双轴订阅成对接/探针 localStorage 先写再 reload/路由拦截 await resp.json()+线端点语义/种子板档位全 active 的断言前提）。
 
 ### Fixed
+- **冷恢复桥·参谋侧接线（批E，V10 R2 挂账兑现）**：patrol 巡检补上参谋侧 rescue——宿主重启时正分诊到一半的 received/talking 命令，其大副会话无活体即 `agents.resume` 续命 + `staffRescueNudgeFor` 续行提示入队（持久队列自动重放舰长已入队的答问，空队列防空转；不重做已完成的分诊）；此前 relay 只重试 draft，这类搁浅会永久卡死。plan 待批不催（等舰长定夺非搁浅）、连败 ≥2 记拒因留置、宿主无 resume 面降级只记不动作（与执行侧 rescue 同纪律）。deepen 复用父会话的会话级续接维持 V10 v1 定案（战线档案保上下文，每命令一会话征召制不破）。机测 +3，verify 315 测 PASS。决策录 DESIGN.md 批E 节。
 - **critique 轮整改（双代理对抗审查 10 张全表面截图，7 真 5 误报；快照 .goal/evidence/critique-v21/）**：①×1.35 字号下命令卡底部被横滚容器裁切（.war-dispatch 定高 218px 未乘字号 → calc(218px*var(--war-fs))，坞高 RO 测量自适应不变）；②EN 图例单行溢出断字（EN mapLegend 用 ASCII `|` 不兼容 zh 侧 `｜` 两行拆分 → EN 两皮肤改 `｜` 并收短词面）；③空场水印压 HQ 图标/执行卡堆（top 38%→58%，HQ 下方净区——空场时执行卡全锚 HQ 向上堆叠）；④宿主 activity 动词「待命」等是投影数据面硬编码中文，EN 界面漏翻 → 新 copy 键 `execVerb`（zh 恒等/en 查表，未知词原样返回），四个渲染点（会话活动行/聚焦页 live 行/2D 星域驻军光点/星域桥编队）全过函数；⑤雷达铭牌读数 9px→10px；⑥EN 岛计数「Field 1」语义生硬 →「Squad 1」；⑦岛计数「等·外勤小队」段加琥珀色（等你=琥珀语义）；⑧生命条未激活段 3px 几乎不可见 → 30% 中性灰可数。误报辨析存档：星域默认 2D=V11.5 定案（雷达值班态，非 bug——3D 截图脚本已改显式切换）；侧栏重名/新会话未译=宿主壳面非插件辖区；红徽章/单行截断/生命条单标签=既有定案。
 - **产物预览/打开目录守卫的插件形态适配（批2 回流勘误，真实 bug）**——workspace/file+reveal 两端点的守卫照搬了 stardeck daemon 前提「受管工作区全在 war_root 下」，但插件形态的注册星球是任意用户目录（真实部署里项目目录几乎从不在 war_root 内）→ **对已注册星球预览全 403**。修正：授权面=账本注册星球（`workspaceFileGuardError` 增 allowedAbs 参数，两路由传 `loadPlanets` resolve 集），war_root 包含只覆盖沙盒自建工作区；name 相对+不越 ws 两道闸对两类一视同仁（穿越/绝对路径拒绝实测不变）。守卫机测补注册星球直读+穿越仍拒两断言。DOM 探针（scripts/probe-sd-b2-md.py）实弹：合法星球过 ws 闸、穿越与绝对路径 body 拒绝。附带：e2e 考题工作区残留清理（run-e2e 自清理前残留）、批2 内联 DOM 取证沉淀为可复跑探针（决策带速览/任务书 md/端点守卫三断言，产物 chip 预览为种子条件断言）。
 
 ### Changed
 - **板面收敛：读 + 下令入口，动作归聚焦页定夺点**（舰长令「账面变更类按钮全部住在读得到上下文的地方，卡面只留导航」）——①命令卡 R5「进入对话」（markTalking 账面变更）与「改直发」（regrade 账面变更）退役：点卡即进聚焦页，答澄清走置顶决策带、改档走配置段，R4 preflight 行退为纯读提示；②任务卡处理钮「去验收/去下重试令」由直跳大副会话改路由聚焦页对应段（reported→report/failed→chain，与收件箱同映射），会话直达降级为聚焦页底部跳钮；③copy `preflight.toDirect` 四典同删（copy-lang 键形锁两侧同删自动过）、死样式清理。保留辨析：收件箱 clarify 跳会话（澄清定夺点本是对话）与聚焦页内部会话直跳不动。决策录 DESIGN.md V20 节。
 - **zh 侧星域图例词面跟上 V19.5 雷达机制**（军事+平话两皮肤）：「✓凯旋 · 呼吸光点=执行中」→「虚线追踪环=执行中 · 铭牌读数=兵数▸状态」（平话「虚线环=进行中 · 名牌读数=人数▸状态」）——V19.5 回流已把 2D 雷达的扩散脉冲/驻军弧退役成旋转虚线追踪环+引线铭牌读数，EN 词典（随 stardeck 来）早已是新机制描述，zh 源串此次补齐；trek 派生随词表自动跟。
-
-### Added
-- **雷达四态读数抽纯函数 `tacStatusWord`**（自绘制壳内联表达式升格，tests 管辖）：active/settled/idle 走词典、failed 给 ✕N（无败记兜 1）——tests/starfield3d 补四态断言（含 ✕1 兜底与 ✕N 败记数），「雷达四态测试」判据至此完整。AGENTS 坑录补 sd 回流四坑（双轴订阅成对接/探针 localStorage 先写再 reload/路由拦截 await resp.json()+线端点语义/种子板档位全 active 的断言前提）。
 
 ## [0.20.2] - 2026-09-04
 

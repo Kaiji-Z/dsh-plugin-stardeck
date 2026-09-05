@@ -283,8 +283,9 @@ export function killCreditAllGreen(evidence: SubmissionEvidence, workspacePath: 
   return { green: true, why: `验收 ${evidence.checks.length} 项全过；${evidence.tests.command} 退出码 0；无越界` }
 }
 
-/** Shared close path (V5-R2 抽取)：落 task_closed + 归档 + goal 结算 + 同工作区接力征召。 */
-async function closeTaskInternal(deps: WarToolsDeps, taskId: string, verdict: string, signal: AbortSignal): Promise<string | undefined> {
+/** Shared close path (V5-R2 抽取)：落 task_closed + 归档 + goal 结算 + 同工作区接力征召。
+ * 导出供 index.ts 接线 dashboard 的播种收官路由（V19.8 回流）。 */
+export async function closeTaskInternal(deps: WarToolsDeps, taskId: string, verdict: string, signal: AbortSignal): Promise<string | undefined> {
   appendEvent(deps.stateDir, { type: 'task_closed', ts: new Date().toISOString(), campaignId: taskId, verdict })
   recordDossier(deps, taskId)
   // B1-件⑤ 孤儿 GC：终态清征召器账（孤儿会话/spawned 守卫/拒因）——best-effort。

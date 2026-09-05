@@ -35,7 +35,7 @@ import type { GoalsFace } from './goals.ts'
 import { createWarStore, resolveStateDir, type WarStore } from './state.ts'
 import { bountyDraftingSkill, type SkillsServiceFace } from './skill.ts'
 import { featureEnabled, runtimeFlags } from './flags.ts'
-import { kickIdleTroops, warTools, armMissingCommanderGoals, type CommanderOps, type SubagentsServiceFace, type WarToolsDeps } from './tools.ts'
+import { kickIdleTroops, warTools, armMissingCommanderGoals, closeTaskInternal, type CommanderOps, type SubagentsServiceFace, type WarToolsDeps } from './tools.ts'
 import { conscriptPlan, workspaceConflict } from './rules.ts'
 import { ActivityTracker } from './activity.ts'
 import { parseUnitReportEvent } from './report-capture.ts'
@@ -782,6 +782,9 @@ export function apply(ctx: Context, config: Config): void {
       roster,
       warRoot: deps.warRoot,
       flags: deps.flags,
+      // V19.8 播种收官（回流）：打回/重试播种令提交成功 → 旧账定性收官——
+      // war_close 同款完整通道（dossier+goal 结算+接力征召）单点复用。
+      closeTask: (taskId, verdict) => { void closeTaskInternal(deps, taskId, verdict, new AbortController().signal) },
       // B1-件② trace 端点的征召视角：spawned 守卫 + 去抖拒因表（只读快照）。
       conscription: () => commander.snapshot(),
       // B1-件⑥ 收官清理：链归档后释放 auto+repo worktree（物化根范围三道保险）。

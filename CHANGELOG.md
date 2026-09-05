@@ -16,6 +16,9 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 
 ## [Unreleased]
 
+### Added
+- **打回/重试播种钮 + 播种收官（回流自 stardeck V19.7/V19.7.2/V19.8，舰长批）**：①聚焦页任务回报段动作行新增「打回重做」（reported 链）、聚焦页任务段 failed 卡新增「重试」（V19.7.2 收敛孤本——板卡零动作钮原则不破）——备书不下令：起草器预填模板文本（「这个 <任务号> 打回重做，理由是：」）+续接自动钉本战线（重做生成同战线新一代），舰长过目可改，提交才入账；②**播种收官**（舰长批「播种后旧账自动定性」）：播种令提交成功 → 旧账经 `POST /warroom/api/tasks/close` 自动定性——判词 `seedVerdict`（纯函数）点名接续命令号让族谱可溯（「打回定性——重做令已下（cmd-x），重做由该代接续，本账就此收官」），关账失败 actNote 出声不回滚已下之令；端点走 war_close 同款完整通道（dossier+goal 结算+接力征召，`closeTaskInternal` 导出经 DashboardDeps.closeTask 接线），只接受 reported/failed 两态+verdict 非空≤500 字，面缺席如实 501——账本事件语义零新增（复用 task_closed）。词典 taskCard 增 6 键×4 皮肤。机测：seed-verdict 判词四态 + close 路由五闸（缺席/成功/缺参/超长/未知/状态）；DOM 探针 scripts/probe-sd-seed.py 2/2（打回重做→起草器预填断言；坑录：全板每秒重渲染下 Playwright actionability click 恒超时，探针须 DOM 直点）。verify PASS。
+
 ### Removed
 - **任务卡处理钮全撤（对齐 stardeck V19.6/V19.6续 的卡面收敛终态）**：①任务列卡面「去验收/去下重试令」钮退役（V20 时改为路由聚焦页段，本轮照 stardeck 更彻底——点卡本体即达聚焦页对应段，卡载钮与之同靶纯属冗余）；②聚焦页链上任务面板与任务回报段的同款跳大副会话钮退役（与底部 ⌁ 任务会话跳钮同靶；该定夺位由播种钮接位，见下条）。TaskCard 摘 onHandle 参、词典 taskCard 退役 handleReview/handleReviewTitle/handleRetry/handleRetryTitle 四键×4 皮肤（EN 键形锁两侧同删）；verify 两正断针脚翻负断言（防复活）。DOM 探针 probe-sd-boardread.py 翻新 5/5（卡面零处理钮/点卡落聚焦页 report 段）。
 

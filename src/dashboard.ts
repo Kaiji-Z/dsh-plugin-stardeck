@@ -116,6 +116,9 @@ export interface DashboardDeps {
   /** K17 计划判定回推：把舰长的批/驳结果投回大副会话（index 经 sessions
    * 面接线；缺席/失败 best-effort，不阻塞判定入账）。 */
   pushToStaff?: (sessionId: string, text: string) => void
+  /** V19.8 播种收官：打回/重试播种令提交成功后旧账定性收官（war_close 完整
+   * 通道；index 接线 closeTaskInternal）。缺席 → 路由如实 501。 */
+  closeTask?: (taskId: string, verdict: string) => void
   /** v3: fired after a command card is created — the host ticks the command
    * fuse NOW so the staff receives in ~1s instead of waiting out the 15s
    * interval. Optional so pure-route tests can omit it. */
@@ -689,6 +692,43 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           deps.pushToStaff(directive.staffSessionId, decision === 'approve' ? planApprovedNotice(note) : planRejectedNotice(note ?? '请修订重呈'))
         }
         send(200, { ok: true, commandId, decision })
+        return
+      }
+      if (r.method === 'POST' && pathname === '/warroom/api/tasks/close') {
+        // V19.8 播种收官（回流）：打回/重试播种令提交成功 → 旧账自动定性。
+        // 只接受 reported/failed 两态（播种场景），verdict 非空；收官走宿主
+        // 完整通道（war_close 同款：dossier+goal 结算+接力征召），面缺席如实拒。
+        if (deps.closeTask === undefined) {
+          send(501, { ok: false, error: '宿主收官通道未接入（closeTask 面缺席）。' })
+          return
+        }
+        const body = JSON.parse(await readBody(r)) as { taskId?: unknown; verdict?: unknown }
+        const taskId = typeof body.taskId === 'string' ? body.taskId.trim() : ''
+        const verdict = typeof body.verdict === 'string' ? body.verdict.trim() : ''
+        if (taskId === '' || verdict === '') {
+          send(400, { ok: false, error: '缺少 taskId 或 verdict。' })
+          return
+        }
+        if (verdict.length > 500) {
+          send(400, { ok: false, error: 'verdict 超长（≤500 字）。' })
+          return
+        }
+        const task = boardProjection(deps.stateDir).find(t => t.taskId === taskId)
+        if (task === undefined) {
+          send(404, { ok: false, error: `任务 ${taskId} 不存在。` })
+          return
+        }
+        if (task.status !== 'reported' && task.status !== 'failed') {
+          send(409, { ok: false, error: `任务 ${taskId} 当前状态 ${task.status} 不可收官（只接受 reported/failed——播种定性场景）。` })
+          return
+        }
+        try {
+          deps.closeTask(taskId, verdict)
+        } catch (err) {
+          send(500, { ok: false, error: `收官通道异常：${err instanceof Error ? err.message : String(err)}` })
+          return
+        }
+        send(200, { ok: true, taskId })
         return
       }
       if (r.method === 'POST' && pathname === '/warroom/api/archive') {

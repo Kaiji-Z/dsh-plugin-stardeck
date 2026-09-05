@@ -218,6 +218,22 @@ export async function decidePlan(commandId: string, decision: 'approve' | 'rejec
   }
 }
 
+/** V19.8 播种收官（回流）：播种令提交成功后旧账自动定性——走宿主收官通道
+ * （war_close 同款完整路径），账面事件语义零新增。 */
+export async function closeTask(taskId: string, verdict: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch('/warroom/api/tasks/close', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ taskId, verdict }),
+    })
+    const body = await res.json() as { ok: boolean; error?: string }
+    return body
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 /** v3 挂载: pin an external session onto the battlefield. */
 export async function attachThread(sessionId: string, note: string): Promise<{ ok: boolean; error?: string }> {
   try {

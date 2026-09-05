@@ -267,6 +267,13 @@ export interface WarCopy {
     taskIdTitle: string
     failReason: (e: string) => string
     failTitle: string
+    /** V19.7 打回/重试播种钮（回流）：备书不下令——起草器预填文本+续接本战线。 */
+    rejectBtn: string
+    rejectBtnTitle: string
+    rejectTemplate: (taskId: string) => string
+    retryBtn: string
+    retryBtnTitle: string
+    retryTemplate: (taskId: string) => string
   }
   grade: Record<'L0' | 'L1' | 'L2', string>
   /** V10 战线链身份：世代徽标悬停语 / 族谱面包屑 aria / 续接模式正名。 */
@@ -716,6 +723,12 @@ export const warCopy: WarCopy = {
     taskIdTitle: '任务单 ID（溯源用）',
     failReason: e => `败因：${e}`,
     failTitle: '重试已用尽，等元首让参谋重新立案',
+    rejectBtn: '打回重做',
+    rejectBtnTitle: '起草打回令——预填任务号并续接本战线，提交前可改',
+    rejectTemplate: id => `这个 ${id} 打回重做，理由是：`,
+    retryBtn: '重试',
+    retryBtnTitle: '起草重试令——预填任务号并续接本战线，提交前可改',
+    retryTemplate: id => `这个 ${id} 执行失败，重试，要求是：`,
   },
   grade: { L0: 'L0 直发', L1: 'L1 呈批', L2: 'L2 澄清' },
   chain: {
@@ -1230,6 +1243,12 @@ export const plainCopy: WarCopy = {
     taskIdTitle: '任务编号（溯源用）',
     failReason: e => `失败原因：${e}`,
     failTitle: '重试已用尽，等规划 Agent 重新立案',
+    rejectBtn: '打回重做',
+    rejectBtnTitle: '打回重做——起草器预填任务号并续接本战线，提交前可改',
+    rejectTemplate: id => `这个 ${id} 打回重做，理由是：`,
+    retryBtn: '重试',
+    retryBtnTitle: '重试——起草器预填任务号并续接本战线，提交前可改',
+    retryTemplate: id => `这个 ${id} 执行失败，重试，要求是：`,
   },
   grade: { L0: 'L0 直发', L1: 'L1 呈批', L2: 'L2 澄清' },
   chain: {

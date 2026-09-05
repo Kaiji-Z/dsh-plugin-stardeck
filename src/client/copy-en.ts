@@ -356,6 +356,12 @@ export const enWarCopy: WarCopy = {
     "taskIdTitle": "Task ID (for traceability)",
     "failReason": e=>`Cause of defeat: ${e}`,
     "failTitle": "Retries exhausted — waiting for the Sovereign to have staff re-open the case",
+    "rejectBtn": "Send back",
+    "rejectBtnTitle": "Draft the send-back order — task ID and lineage pre-filled, editable before submit",
+    "rejectTemplate": id=>`Send back ${id} for rework — reason: `,
+    "retryBtn": "Retry",
+    "retryBtnTitle": "Draft the retry order — task ID and lineage pre-filled, editable before submit",
+    "retryTemplate": id=>`${id} failed — retry, requirements: `,
   },
   "grade": {
     "L0": "L0 direct",
@@ -1061,7 +1067,13 @@ export const enPlainCopy: WarCopy = {
     "attemptNTitle": "Attempt count including auto re-dispatches",
     "taskIdTitle": "Task ID (for traceability)",
     "failReason": e=>`Failure reason: ${e}`,
-    "failTitle": "Retries exhausted — waiting for the Planning Agent to re-open the case"
+    "failTitle": "Retries exhausted — waiting for the Planning Agent to re-open the case",
+    "rejectBtn": "Send back",
+    "rejectBtnTitle": "Send back for rework — the composer pre-fills task ID and lineage, editable before submit",
+    "rejectTemplate": id=>`Send back ${id} for rework — reason: `,
+    "retryBtn": "Retry",
+    "retryBtnTitle": "Retry — the composer pre-fills task ID and lineage, editable before submit",
+    "retryTemplate": id=>`${id} failed — retry, requirements: `
   },
   "grade": {
     "L0": "L0 direct",

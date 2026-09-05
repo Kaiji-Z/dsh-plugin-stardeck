@@ -63,7 +63,7 @@ async function call(handler: (req: unknown, res: unknown) => Promise<void>, req:
 }
 
 /** seed：命令已批准挂任务 + 任务走到指定状态（claimed 才有 attempt 会话）。 */
-function seedApprovedWithTask(dir: string, cmdId: string, taskId: string, taskStatus: 'published' | 'in_progress' | 'closed' | 'failed'): void {
+function seedApprovedWithTask(dir: string, cmdId: string, taskId: string, taskStatus: 'published' | 'in_progress' | 'reported' | 'closed' | 'failed'): void {
   appendDirectiveEvent(dir, { type: 'directive_created', ts: 't0', directiveId: cmdId, text: 'x' })
   appendDirectiveEvent(dir, { type: 'directive_session_opened', ts: 't1', directiveId: cmdId, staffSessionId: `staff-${cmdId}` })
   appendDirectiveEvent(dir, { type: 'directive_received', ts: 't2', directiveId: cmdId, staffSessionId: `staff-${cmdId}` })
@@ -72,8 +72,10 @@ function seedApprovedWithTask(dir: string, cmdId: string, taskId: string, taskSt
   if (taskStatus === 'in_progress' || taskStatus === 'closed') {
     appendEvent(dir, { type: 'task_claimed', ts: 't5', campaignId: taskId, claimedBy: `cmdr-${taskId}`, attemptId: 'tok', attempt: 1 })
   }
-  if (taskStatus === 'closed') {
+  if (taskStatus === 'reported' || taskStatus === 'closed') {
     appendEvent(dir, { type: 'task_submitted', ts: 't6', campaignId: taskId, from: `cmdr-${taskId}`, report: 'r' })
+  }
+  if (taskStatus === 'closed') {
     appendEvent(dir, { type: 'task_closed', ts: 't7', campaignId: taskId, verdict: '通过' })
   }
   if (taskStatus === 'failed') {
@@ -324,5 +326,45 @@ test('V19 回流·workspace/file+reveal 只读端点：守卫四拒/封顶/二�
     h.dispose()
     rmSync(warRoot, { recursive: true, force: true })
     rmSync(outside, { recursive: true, force: true })
+  }
+})
+
+test('V19.8 播种收官路由：reported 可定性收官、面缺席拒、状态/参数闸', async () => {
+  // 面缺席优先（与 archive 同款诚实降级）。
+  const dir0 = tmpStateDir()
+  const bare = makeHandler({ stateDir: dir0 })
+  try {
+    const r0 = await call(bare.handler, postReq('/warroom/api/tasks/close', { taskId: 'task-x', verdict: 'v' }))
+    assert.equal(r0.body.ok, false)
+    assert.match(r0.body.error, /收官通道未接入/)
+  } finally {
+    bare.dispose()
+  }
+  // wired：reported 任务定性收官成功，closeTask 收到 (taskId, verdict)。
+  const dir = tmpStateDir()
+  const closes: Array<[string, string]> = []
+  const h = makeHandler({ stateDir: dir, closeTask: (taskId: string, verdict: string) => { closes.push([taskId, verdict]) } })
+  try {
+    seedApprovedWithTask(dir, 'cmd-seed', 'task-seed', 'reported')
+    const okr = await call(h.handler, postReq('/warroom/api/tasks/close', { taskId: 'task-seed', verdict: '打回定性——重做令已下，重做由该代接续，本账就此收官' }))
+    assert.equal(okr.body.ok, true)
+    assert.deepEqual(closes, [['task-seed', '打回定性——重做令已下，重做由该代接续，本账就此收官']])
+    // 参数闸：缺 verdict → 400；超长 verdict → 400。
+    const rv = await call(h.handler, postReq('/warroom/api/tasks/close', { taskId: 'task-seed' }))
+    assert.match(rv.body.error, /缺少 taskId 或 verdict/)
+    const rl = await call(h.handler, postReq('/warroom/api/tasks/close', { taskId: 'task-seed', verdict: 'x'.repeat(501) }))
+    assert.match(rl.body.error, /超长/)
+    // 未知任务 → 404。
+    const rn = await call(h.handler, postReq('/warroom/api/tasks/close', { taskId: 'task-nope', verdict: 'v' }))
+    assert.match(rn.body.error, /不存在/)
+    // 状态闸：published 不可收官（播种定性只对 reported/failed）。
+    seedApprovedWithTask(dir, 'cmd-seed2', 'task-seed2', 'published')
+    const rs = await call(h.handler, postReq('/warroom/api/tasks/close', { taskId: 'task-seed2', verdict: 'v' }))
+    assert.match(rs.body.error, /不可收官/)
+    assert.equal(closes.length, 1)
+  } finally {
+    h.dispose()
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(dir0, { recursive: true, force: true })
   }
 })

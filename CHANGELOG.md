@@ -17,6 +17,7 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 ## [Unreleased]
 
 ### Fixed
+- **critique 轮整改（双代理对抗审查 10 张全表面截图，7 真 5 误报；快照 .goal/evidence/critique-v21/）**：①×1.35 字号下命令卡底部被横滚容器裁切（.war-dispatch 定高 218px 未乘字号 → calc(218px*var(--war-fs))，坞高 RO 测量自适应不变）；②EN 图例单行溢出断字（EN mapLegend 用 ASCII `|` 不兼容 zh 侧 `｜` 两行拆分 → EN 两皮肤改 `｜` 并收短词面）；③空场水印压 HQ 图标/执行卡堆（top 38%→58%，HQ 下方净区——空场时执行卡全锚 HQ 向上堆叠）；④宿主 activity 动词「待命」等是投影数据面硬编码中文，EN 界面漏翻 → 新 copy 键 `execVerb`（zh 恒等/en 查表，未知词原样返回），四个渲染点（会话活动行/聚焦页 live 行/2D 星域驻军光点/星域桥编队）全过函数；⑤雷达铭牌读数 9px→10px；⑥EN 岛计数「Field 1」语义生硬 →「Squad 1」；⑦岛计数「等·外勤小队」段加琥珀色（等你=琥珀语义）；⑧生命条未激活段 3px 几乎不可见 → 30% 中性灰可数。误报辨析存档：星域默认 2D=V11.5 定案（雷达值班态，非 bug——3D 截图脚本已改显式切换）；侧栏重名/新会话未译=宿主壳面非插件辖区；红徽章/单行截断/生命条单标签=既有定案。
 - **产物预览/打开目录守卫的插件形态适配（批2 回流勘误，真实 bug）**——workspace/file+reveal 两端点的守卫照搬了 stardeck daemon 前提「受管工作区全在 war_root 下」，但插件形态的注册星球是任意用户目录（真实部署里项目目录几乎从不在 war_root 内）→ **对已注册星球预览全 403**。修正：授权面=账本注册星球（`workspaceFileGuardError` 增 allowedAbs 参数，两路由传 `loadPlanets` resolve 集），war_root 包含只覆盖沙盒自建工作区；name 相对+不越 ws 两道闸对两类一视同仁（穿越/绝对路径拒绝实测不变）。守卫机测补注册星球直读+穿越仍拒两断言。DOM 探针（scripts/probe-sd-b2-md.py）实弹：合法星球过 ws 闸、穿越与绝对路径 body 拒绝。附带：e2e 考题工作区残留清理（run-e2e 自清理前残留）、批2 内联 DOM 取证沉淀为可复跑探针（决策带速览/任务书 md/端点守卫三断言，产物 chip 预览为种子条件断言）。
 
 ### Changed

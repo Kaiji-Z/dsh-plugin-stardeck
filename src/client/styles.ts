@@ -242,6 +242,7 @@ body[data-ds-dark-theme] .war-root{
 .war-island-counts{font-size:calc(12px*var(--war-fs));color:var(--war-text-2);white-space:nowrap}
 .war-island-num{font-size:calc(13px*var(--war-fs));font-weight:600;color:var(--war-text-2)} /* V12.2 critique P3：计数数字上权重（第一眼信息反层级倒挂） */
 .war-island-badge{font-size:calc(12px*var(--war-fs));line-height:calc(18px*var(--war-fs));padding:0 8px;border-radius:9px;border:1px solid var(--war-border);color:var(--war-text-2);white-space:nowrap;background:transparent;cursor:pointer;font-family:var(--war-font)} /* V16.4-R3：span→button——显式透明底防 UA ButtonFace 泄漏 */
+.war-island-seg-wait{color:var(--war-wait)}
 .war-island-seg{background:none;border:none;font:inherit;color:inherit;cursor:pointer;padding:0}
 .war-island-seg:hover .war-island-num,.war-island-seg:hover{color:var(--war-text-1)}
 .war-flash{outline:2px solid var(--war-focus) !important;outline-offset:1px;border-radius:var(--war-r-sm)} /* V16.4-R3：计数路由的 1.6s 闪显描边 */
@@ -286,7 +287,7 @@ body[data-ds-dark-theme] .war-root{
  * 命令卡全部进 .war-dispatch-track 轨道横滚；「命令调度」铭牌休眠。 */
 /* V17.6 舰长令：调度栏**定高**——横滚条预留进栏高内（卡区=卡高+细滚条位），
  * 滚条出现/消失不改变栏高，卡锚 y 恒定（顶对齐+定值 padding-top）。 */
-.war-dispatch{flex:0 0 auto;display:flex;gap:10px;align-items:stretch;height:218px;margin:0 10px 10px;padding:10px;border:1px solid var(--war-border);border-radius:var(--war-r-lg);background:var(--war-dock-bg);box-shadow:var(--war-dock-inset)}
+.war-dispatch{flex:0 0 auto;display:flex;gap:10px;align-items:stretch;height:calc(218px*var(--war-fs));margin:0 10px 10px;padding:10px;border:1px solid var(--war-border);border-radius:var(--war-r-lg);background:var(--war-dock-bg);box-shadow:var(--war-dock-inset)}
 .war-dispatch-track{flex:1 1 auto;min-width:0;display:flex;gap:10px;align-items:flex-start;padding:10px 2px 12px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:thin}
 .war-dispatch-track.can-scroll{mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 26px),rgba(0,0,0,.35));-webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 26px),rgba(0,0,0,.35))}
 .war-dispatch .war-command-card{flex:0 0 320px;min-width:0}
@@ -364,7 +365,7 @@ body[data-ds-dark-theme] .war-root{
 /* --- command lifecycle strip (v6: 命令→任务→执行→任务回报 全程追踪) -------------- */
 .war-life{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-top:2px}
 .war-life-stage{display:flex;flex-direction:column;gap:3px;min-width:0}
-.war-life-bar{height:3px;border-radius:2px;background:var(--war-border);transition:background .2s ease}
+.war-life-bar{height:3px;border-radius:2px;background:color-mix(in srgb, var(--war-text-2) 30%, transparent);transition:background .2s ease}
 .war-life-bar.done{background:var(--war-done-border)}
 .war-life-bar.err{background:var(--war-fail-border)} /* V12.2 critique P2：败局终站红——绿严格=圆满（图例契约），挫败的报告段红收尾 */
 .war-life-bar.now{background:var(--war-run-border);animation:war-life-breath 2.4s ease-in-out infinite}
@@ -799,7 +800,7 @@ body[data-ds-dark-theme] .war-root .war-stars{position:absolute;inset:0;
 .war-wz-hint{font:12px/1.5 var(--war-font);color:var(--war-wz-hint)}
 /* sd 回流（stardeck critique 复检 P2）：0 星球空场常驻水印——指路 toast 会退场
  * +冷却，水印不睡；虚线框+半透明底=「注册门就在 HQ」的低调 affordance。 */
-.war-wz-empty{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);padding:10px 18px;border-radius:var(--war-r-lg);border:1px dashed color-mix(in srgb, var(--war-wz-hint) 45%, transparent);background:color-mix(in srgb, var(--war-card-bg) 55%, transparent);font:13px/1.6 var(--war-font);color:var(--war-wz-hint);letter-spacing:.04em;pointer-events:none;text-align:center;max-width:70%}
+.war-wz-empty{position:absolute;left:50%;top:58%;transform:translate(-50%,-50%);padding:10px 18px;border-radius:var(--war-r-lg);border:1px dashed color-mix(in srgb, var(--war-wz-hint) 45%, transparent);background:color-mix(in srgb, var(--war-card-bg) 55%, transparent);font:13px/1.6 var(--war-font);color:var(--war-wz-hint);letter-spacing:.04em;pointer-events:none;text-align:center;max-width:70%}
 /* V18.3：定宽 360（高度不限，长路径换行不省略）；pointer-events auto——聚焦态
  * 钉住卡内嵌战线行可点击（事件委托 data-wz-front，卡体点击不落回星域）。 */
 .war-wz-tip{position:absolute;left:0;top:0;z-index:20;min-width:236px;max-width:360px;display:none;background:var(--war-wz-tip-bg);border:1px solid var(--war-wz-tip-border);border-radius:var(--war-r-md);padding:12px 14px;backdrop-filter:blur(8px);box-shadow:var(--war-wz-tip-shadow);color:var(--war-wz-tip-text);font:12px/1.65 var(--war-font);pointer-events:auto}

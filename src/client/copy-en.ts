@@ -173,6 +173,7 @@ export const enWarCopy: WarCopy = {
     "exitFocus": "Exit focus",
     "focusBtnTitle": "Light up only this command's lineage (its tasks and operation sessions); Esc to exit"
   },
+  "execVerb": label=>{const t={"待命":"standby","思考中":"thinking","探索中":"exploring","已探索":"explored","编辑中":"editing","已编辑":"edited","运行命令":"running command","命令完成":"command done"};const hit=t[label];if(hit!==undefined)return hit;const run=label.match(/^执行中·(.+)$/);if(run!==null)return `running·${run[1]}`;const done=label.match(/^(.+)·完成$/);if(done!==null)return `${done[1]}·done`;return label},
   "preflight": {
     "hint": "Will stall at plan-approval — nobody approves at night",
     "hintTalking": "Answer the Staff Officer first, then approve the plan — both steps before it proceeds; unattended at night it stalls until morning",
@@ -391,7 +392,7 @@ export const enWarCopy: WarCopy = {
     "hqOn": "HQ online — wartime state, the master switch is on",
     "hqOff": "Peacetime — HQ lights are off",
     "orbIdle": "Executing",
-    "mapLegend": "Blue=running · amber=queued · green=done · red=failed | Planet = workspace (inner = oldest) · segmented ring = front count | rotating dashed ring = in combat · callout readout = troops▸state",
+    "mapLegend": "Blue=running · amber=waiting · green=done · red=failed ｜ Planet=workspace · segmented ring=front count ｜ dashed ring=in combat · readout=troops▸state",
     "mapHintToast": "🪐 More than one battlefield — try the War Zone view (click to enable; toggle anytime in ⚙ settings)",
     "mapHintDismiss": "Dismiss",
     "controls": "Left-drag pan · middle-drag rotate · wheel zoom · double-click or R reset · hover a dot to light its campaign",
@@ -673,8 +674,8 @@ export const enWarCopy: WarCopy = {
     "lineageJumpTitle": id=>`From command ${id} \u2014 click to trace the full lifecycle`
   },
   "island": {
-    "counts": c=>[c.pending>0?`On it ${c.pending}`:"",c.waiting>0?`Field ${c.waiting}`:"",c.active>0?`Executing ${c.active}`:"",c.failed>0?`Defeats ${c.failed}`:""].filter(x=>x!=="").join(" \xB7 "),
-    "countSegs": c=>[c.pending>0?{kind:"pending",label:`On it ${c.pending}`}:null,c.waiting>0?{kind:"waiting",label:`Field ${c.waiting}`}:null,c.active>0?{kind:"active",label:`Executing ${c.active}`}:null,c.failed>0?{kind:"failed",label:`Defeats ${c.failed}`}:null].filter(x=>x!==null),
+    "counts": c=>[c.pending>0?`On it ${c.pending}`:"",c.waiting>0?`Squad ${c.waiting}`:"",c.active>0?`Executing ${c.active}`:"",c.failed>0?`Defeats ${c.failed}`:""].filter(x=>x!=="").join(" \xB7 "),
+    "countSegs": c=>[c.pending>0?{kind:"pending",label:`On it ${c.pending}`}:null,c.waiting>0?{kind:"waiting",label:`Squad ${c.waiting}`}:null,c.active>0?{kind:"active",label:`Executing ${c.active}`}:null,c.failed>0?{kind:"failed",label:`Defeats ${c.failed}`}:null].filter(x=>x!==null),
     "countsScope": "Counts cover all tabs (tabs only switch the three columns)",
     "inboxBadge": n=>`\u2709 ${n}`,
     "visitMini": (closed,failed,commands)=>[closed>0?`\u2713settled ${closed}`:"",failed>0?`\u2715defeats ${failed}`:"",commands>0?`\u271Anew ${commands}`:""].filter(s=>s!=="").join(" \xB7 "),
@@ -871,6 +872,7 @@ export const enPlainCopy: WarCopy = {
     "exitFocus": "Exit",
     "focusBtnTitle": "Show only this command's tasks and sessions, dim the rest; Esc to exit"
   },
+  "execVerb": label=>{const t={"待命":"standby","思考中":"thinking","探索中":"exploring","已探索":"explored","编辑中":"editing","已编辑":"edited","运行命令":"running command","命令完成":"command done"};const hit=t[label];if(hit!==undefined)return hit;const run=label.match(/^执行中·(.+)$/);if(run!==null)return `running·${run[1]}`;const done=label.match(/^(.+)·完成$/);if(done!==null)return `${done[1]}·done`;return label},
   "preflight": {
     "hint": "Waits for your plan approval — stalls all night if nobody approves",
     "hintTalking": "The Planning Agent is waiting for your reply, and the proposal needs your approval — both steps before it proceeds; left unattended overnight it stalls",
@@ -1089,7 +1091,7 @@ export const enPlainCopy: WarCopy = {
     "hqOn": "Working — HQ lights on",
     "hqOff": "No active item lines right now",
     "orbIdle": "Running",
-    "mapLegend": "Blue=working · amber=waiting · green=done · red=failed | Planet = project (inner = oldest) · segmented ring = line count | dashed ring = busy now · callout text = troops and status",
+    "mapLegend": "Blue=working · amber=waiting · green=done · red=failed ｜ Planet=project · segmented ring=line count ｜ dashed ring=busy · readout=troops▸status",
     "mapHintToast": "🪐 More than one project — try the map view (click to open; toggle in ⚙ settings)",
     "mapHintDismiss": "Dismiss",
     "controls": "Left-drag pan · middle-drag orbit · wheel zoom · double-click or R reset · hover a bright dot to see related",

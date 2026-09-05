@@ -2543,7 +2543,7 @@ export class WarzoneTactical {
       ;(g as unknown as { letterSpacing?: string }).letterSpacing = '0px'
       const statusWord = tacStatusWord(a.p.state, a.p.failing, sf)
       const read = `${a.p.garrison > 0 ? `${a.p.garrison}▸` : ''}${statusWord}`
-      g.font = '9px Consolas,"Microsoft YaHei"'; g.fillStyle = P.name
+      g.font = '10px Consolas,"Microsoft YaHei"'; g.fillStyle = P.name
       g.fillText(read, place.tx, place.ly + 7)
       g.globalAlpha = 1
     }

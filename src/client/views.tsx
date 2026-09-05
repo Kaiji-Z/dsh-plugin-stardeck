@@ -1524,7 +1524,7 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
                 : null)
             : createElement('div', { className: 'war-tour-hint' },
               liveAttempts.length > 0
-                ? (() => { const la = liveAttempts[0]!.a; return fp.reportLive(la.activity?.label ?? activeCopy().starfield.orbIdle, la.n, relTime(la.startedAt)) })()
+                ? (() => { const la = liveAttempts[0]!.a; return fp.reportLive(activeCopy().execVerb(la.activity?.label ?? activeCopy().starfield.orbIdle), la.n, relTime(la.startedAt)) })()
                 : chain.some(t => t.status === 'published') ? fp.reportQueued
                 : execSessions.length > 0 ? fp.reportSettledSoon
                 : fp.reportNone),
@@ -1693,9 +1693,9 @@ function SessionCard(task: BoardTask, attempt: BoardAttempt, onDetail: (task: Bo
   // V9.11 R2 实时活动行：live attempt 上宿主动词单点计算的 label（思考中/探索中/
   // 编辑中…双皮肤同词）——原生会话窗口的过程语汇简略版，点卡仍直跳原生全文。
   outcomeKey === 'live' && attempt.activity != null && attempt.activity.label !== ''
-    ? createElement('div', { className: 'war-activity', title: `${attempt.activity.label} · ${attempt.activity.ts}` },
+    ? createElement('div', { className: 'war-activity', title: `${activeCopy().execVerb(attempt.activity.label)} · ${attempt.activity.ts}` },
         createElement('span', { className: 'war-activity-dot', 'aria-hidden': 'true' }),
-        createElement('span', { className: 'war-activity-label' }, attempt.activity.label),
+        createElement('span', { className: 'war-activity-label' }, activeCopy().execVerb(attempt.activity.label)),
       )
     : null,
   outcomeKey === 'failed'
@@ -1940,7 +1940,7 @@ function WarIsland(props: {
           ? createElement('b', { key: `n${pi}-${i}`, className: 'war-island-num' }, t)
           : t)
         return (pi > 0 ? [' · '] : []).concat([createElement('button', {
-          key: `seg-${pi}`, type: 'button', className: 'war-island-seg', title: seg.label,
+          key: `seg-${pi}`, type: 'button', className: `war-island-seg${seg.kind === 'waiting' ? ' war-island-seg-wait' : ''}`, title: seg.label,
           onClick: e => { e.stopPropagation(); go() },
         }, ...inner)])
       })),
@@ -2631,7 +2631,7 @@ export function warView(services: ClientServicesFace): () => ReactNode {
         if (t.status === 'published') awaiting += 1
         if (t.status === 'failed') failing += 1
         for (const a of t.attemptLog) {
-          if (a.outcome === null && a.endedAt === null) orbs.push({ sessionId: a.sessionId, verbLabel: a.activity?.label ?? null, paused: t.quotaPaused === true })
+          if (a.outcome === null && a.endedAt === null) { const vl = a.activity?.label ?? null; orbs.push({ sessionId: a.sessionId, verbLabel: vl === null ? null : activeCopy().execVerb(vl), paused: t.quotaPaused === true }) }
         }
       }
       return { orbs, triumphs, awaiting, failing }
@@ -2659,7 +2659,7 @@ export function warView(services: ClientServicesFace): () => ReactNode {
         planet: spec ?? { wsPath: '__hq__', ring: 0, xPct: HQ_POS.xPct, yPct: HQ_POS.yPct },
         xPct: pos.xPct,
         yPct: pos.yPct,
-        verbLabel: a.activity?.label ?? activeCopy().starfield.orbIdle,
+        verbLabel: activeCopy().execVerb(a.activity?.label ?? activeCopy().starfield.orbIdle),
         paused: t.quotaPaused === true,
         sourceCommandId: src,
         sourceLabel,
@@ -2751,7 +2751,8 @@ export function warView(services: ClientServicesFace): () => ReactNode {
     const starFronts2d = wzFronts
     const wzSquads: WzBridgeSquad[] = []
     for (const { t, a } of live) {
-      const verb = a.activity?.label ?? null
+      const rawVerb = a.activity?.label ?? null
+      const verb = rawVerb === null ? null : activeCopy().execVerb(rawVerb)
       const src = lineageOf(t.taskId)?.commandId ?? null
       wzSquads.push({
         sessionId: a.sessionId,

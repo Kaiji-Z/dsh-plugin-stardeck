@@ -215,6 +215,9 @@ export interface WarCopy {
     focusBtnTitle: string
   }
   /** V7-④ 夜间预检（将停在计划待批的命令警告 + 改直发出口）。 */
+  /** 宿主 activity 动词的数据面翻译（activityLabel 出参是硬编码中文词——投影
+   *  以数据形态过板，语言轴在此渲染点翻译；zh 恒等，en 查表，未知词原样返回）。 */
+  execVerb: (label: string) => string
   preflight: {
     hint: string
     /** sd 回流（stardeck critique P2）：talking 态的真阻塞是「等你答问」——预检
@@ -611,6 +614,7 @@ export const warCopy: WarCopy = {
     exitFocus: '退出聚焦',
     focusBtnTitle: '只亮这条命令的族系（它的任务与作战会话），其余压暗；Esc 退出',
   },
+  execVerb: label => label,
   preflight: {
     hint: '将停在计划待批——夜间无人值守会停整晚',
     hintTalking: '答完参谋的问还要批计划——两步都过才会继续跑，夜里没人理会停整晚',
@@ -1117,6 +1121,7 @@ export const plainCopy: WarCopy = {
     exitFocus: '退出',
     focusBtnTitle: '只显示这条命令相关的任务与会话，其余变淡；Esc 退出',
   },
+  execVerb: label => label,
   preflight: {
     hint: '需要你批准方案后才会继续——夜里没人处理会一直停着',
     hintTalking: '规划 Agent 先等你的回话，方案也要你点头——两步都过才会继续，夜里没人理会停一晚',

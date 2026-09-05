@@ -397,7 +397,7 @@ export const enWarCopy: WarCopy = {
     "hqOn": "HQ online — wartime state, the master switch is on",
     "hqOff": "Peacetime — HQ lights are off",
     "orbIdle": "Executing",
-    "mapLegend": "Blue=running · amber=waiting · green=done · red=failed ｜ Planet=workspace · segmented ring=front count ｜ dashed ring=in combat · readout=troops▸state",
+    "mapLegend": "Blue=running · amber=waiting · green=done · red=failed ｜ Planet=workspace · segmented ring=front count · dashed ring=in combat",
     "mapHintToast": "🪐 More than one battlefield — try the War Zone view (click to enable; toggle anytime in ⚙ settings)",
     "mapHintDismiss": "Dismiss",
     "controls": "Left-drag pan · middle-drag rotate · wheel zoom · double-click or R reset · hover a dot to light its campaign",
@@ -448,7 +448,7 @@ export const enWarCopy: WarCopy = {
     "sqTag": "Field squadron",
     "targetLabel": "Target battlefield",
     "phaseLabel": "Action",
-    "returnHq": "Return → mothership",
+    "returnHq": "Return → Headquarters",
     "phOutbound": pct=>`Sortie \xB7 ${pct}%`,
     "phBattle": verb=>`In operation \xB7 ${verb}`,
     "phDeployed": "Awaiting review · on station",
@@ -525,7 +525,7 @@ export const enWarCopy: WarCopy = {
     "previewTitle": name=>`Artifact preview \xB7 ${name}`,
     "previewOpen": "Reveal in file manager",
     "previewOpenDone": "Opened in your file manager.",
-    "previewOpenFail": "Failed to open the folder (see bridge log).",
+    "previewOpenFail": "Failed to open the folder (see service log).",
     "previewBinary": "Not a text file — use \"Reveal in file manager\" to view it.",
     "previewEmpty": "(empty file)",
     "previewFail": "Failed to load artifact: ",
@@ -769,7 +769,7 @@ export const enPlainCopy: WarCopy = {
     "retryBtn": "View failures",
     "scheduledHint": time=>`Scheduled \xB7 starts automatically at ${time} (not relayed before then)`,
     "noGrade": "Not triaged yet",
-    "noBattle": "Awaiting an executor",
+    "noBattle": "Awaiting an execution agent",
     "battleLine": n=>`Run ${n} time${n===1?"":"s"}`,
     "noReport": "No result yet",
     "evChecks": "checks passed",
@@ -845,7 +845,7 @@ export const enPlainCopy: WarCopy = {
     "approvedAwaitingPublish": "Task pending release",
     "planPending": "Proposal awaiting your approval",
     "formingDrafting": "Drafting",
-    "waitingClaim": "Awaiting an executor",
+    "waitingClaim": "Awaiting an execution agent",
     "attemptN": n=>`Attempt ${n}`,
     "chain": (done,total)=>`Task group ${done}/${total}`,
     "cancelled": "Cancelled",
@@ -900,7 +900,7 @@ export const enPlainCopy: WarCopy = {
   },
   "waitHint": {
     "queued": n=>`Queued \u2014 ${n} ahead in the same workspace (no parallel runs)`,
-    "awaitingClaim": "Awaiting an executor",
+    "awaitingClaim": "Awaiting an execution agent",
     "quotaPaused": "Quota recovering — paused; the original task resumes on recovery (no restart)"
   },
   "actions": {
@@ -937,7 +937,7 @@ export const enPlainCopy: WarCopy = {
       ],
       [
         "！",
-        "New task, awaiting an executor"
+        "New task, awaiting an execution agent"
       ],
       [
         "？",
@@ -953,7 +953,7 @@ export const enPlainCopy: WarCopy = {
       ],
       [
         "⌁",
-        "Session-id prefix (executor / externally mounted sessions)"
+        "Session-id prefix (execution agent / externally mounted sessions)"
       ],
       [
         "Breathing outline",
@@ -987,7 +987,7 @@ export const enPlainCopy: WarCopy = {
     "newTitle": "New command"
   },
   "taskStatus": {
-    "published": "Awaiting · Executor Agent",
+    "published": "Awaiting · execution agent",
     "in_progress": "Running",
     "reported": "Awaiting review",
     "draft": "Draft",
@@ -1101,7 +1101,7 @@ export const enPlainCopy: WarCopy = {
     "hqOn": "Working — HQ lights on",
     "hqOff": "No active item lines right now",
     "orbIdle": "Running",
-    "mapLegend": "Blue=working · amber=waiting · green=done · red=failed ｜ Planet=project · segmented ring=line count ｜ dashed ring=busy · readout=troops▸status",
+    "mapLegend": "Blue=working · amber=waiting · green=done · red=failed ｜ Planet=project · segmented ring=line count · dashed ring=busy",
     "mapHintToast": "🪐 More than one project — try the map view (click to open; toggle in ⚙ settings)",
     "mapHintDismiss": "Dismiss",
     "controls": "Left-drag pan · middle-drag orbit · wheel zoom · double-click or R reset · hover a bright dot to see related",
@@ -1229,7 +1229,7 @@ export const enPlainCopy: WarCopy = {
     "previewTitle": name=>`Artifact preview \xB7 ${name}`,
     "previewOpen": "Reveal in file manager",
     "previewOpenDone": "Opened in your file manager.",
-    "previewOpenFail": "Failed to open the folder (see bridge log).",
+    "previewOpenFail": "Failed to open the folder (see log).",
     "previewBinary": "Not a text file — use \"Reveal in file manager\" to view it.",
     "previewEmpty": "(empty file)",
     "previewFail": "Failed to load artifact: ",
@@ -1237,17 +1237,17 @@ export const enPlainCopy: WarCopy = {
     "attemptsSection": "Run history",
     "battleLive": n=>`${n} run${n===1?"":"s"} in progress`,
     "battleDone": "Execution finished — no sessions in progress",
-    "battleNone": "Not started yet — awaiting an Executor Agent to claim the task",
+    "battleNone": "Not started yet — awaiting an execution agent to claim the task",
     "reportVerdict": "Final verdict",
     "reportLatest": "Latest report",
     "reportNone": "No report yet — the verdict appears here after closing",
     "reportLive": (verb,n,when)=>`Running \xB7 ${verb} \xB7 attempt ${n} \xB7 since ${when}`,
-    "reportQueued": "Awaiting an executor — progress is reported here once they start",
+    "reportQueued": "Awaiting an execution agent — progress is reported here once they start",
     "reportSettledSoon": "The previous round has ended; the result will be placed here once organized",
     "taskSessionBtn": "Task session",
     "execSessionBtn": "Run session",
     "taskSessionHint": "No Planning Agent session yet — appears once the command is relayed",
-    "execSessionHint": "No run session yet — appears once an Executor Agent claims the task"
+    "execSessionHint": "No run session yet — appears once an execution agent claims the task"
   },
   "composer": {
     "title": "New command",
@@ -1375,7 +1375,7 @@ export const enPlainCopy: WarCopy = {
     "failReason": e=>`Failure reason: ${e}`,
     "attemptFailedNeutral": "This attempt failed — open the review for the full run",
     "waitingReport": "Evidence verified — awaiting your review",
-    "cardTitle": sessionId=>`Executor session ${sessionId} \u2014 click for details`
+    "cardTitle": sessionId=>`Execution agent session ${sessionId} \u2014 click for details`
   },
   "detail": {
     "reportPrefix": ts=>`[Report \xB7 ${ts}]`,
@@ -1383,8 +1383,8 @@ export const enPlainCopy: WarCopy = {
     "lineageJumpTitle": id=>`Source ${id} \u2014 click for details`
   },
   "island": {
-    "counts": c=>[c.pending>0?`Planning ${c.pending}`:"",c.waiting>0?`Executor ${c.waiting}`:"",c.active>0?`Running ${c.active}`:"",c.failed>0?`Failed ${c.failed}`:""].filter(x=>x!=="").join(" \xB7 "),
-    "countSegs": c=>[c.pending>0?{kind:"pending",label:`Planning ${c.pending}`}:null,c.waiting>0?{kind:"waiting",label:`Executor ${c.waiting}`}:null,c.active>0?{kind:"active",label:`Running ${c.active}`}:null,c.failed>0?{kind:"failed",label:`Failed ${c.failed}`}:null].filter(x=>x!==null),
+    "counts": c=>[c.pending>0?`Planning ${c.pending}`:"",c.waiting>0?`Execution agent ${c.waiting}`:"",c.active>0?`Running ${c.active}`:"",c.failed>0?`Failed ${c.failed}`:""].filter(x=>x!=="").join(" \xB7 "),
+    "countSegs": c=>[c.pending>0?{kind:"pending",label:`Planning ${c.pending}`}:null,c.waiting>0?{kind:"waiting",label:`Execution agent ${c.waiting}`}:null,c.active>0?{kind:"active",label:`Running ${c.active}`}:null,c.failed>0?{kind:"failed",label:`Failed ${c.failed}`}:null].filter(x=>x!==null),
     "countsScope": "Counts cover the whole board (tabs only switch the three columns)",
     "inboxBadge": n=>`\u2709 ${n}`,
     "visitMini": (closed,failed,commands)=>[closed>0?`\u2713done ${closed}`:"",failed>0?`\u2715failed ${failed}`:"",commands>0?`\uFF0Bnew ${commands}`:""].filter(s=>s!=="").join(" \xB7 "),
@@ -1412,8 +1412,8 @@ export const enPlainCopy: WarCopy = {
   },
   "dock": {
     "label": "Workbench",
-    "titleLine": c=>`Planner ${c.pending} \xB7 Executor ${c.waiting} \xB7 running ${c.active}${c.failed>0?` \xB7 failed ${c.failed}`:""} \u2014 click to return to the Workbench`,
-    "segLine": c=>`Workbench${c.pending>0?` planner ${c.pending}`:""} executor ${c.waiting} run ${c.active}${c.failed>0?` fail ${c.failed}`:""}`,
+    "titleLine": c=>`Planner ${c.pending} \xB7 Execution agent ${c.waiting} \xB7 running ${c.active}${c.failed>0?` \xB7 failed ${c.failed}`:""} \u2014 click to return to the Workbench`,
+    "segLine": c=>`Workbench${c.pending>0?` planner ${c.pending}`:""} execution agent ${c.waiting} run ${c.active}${c.failed>0?` fail ${c.failed}`:""}`,
     "unread": n=>`${n} new`
   }
 }
@@ -1438,4 +1438,9 @@ export const EN_TREK_LEXICON: ReadonlyArray<readonly [string, string]> = [
   ["sorties", "beams down"],
   ["mothership", "flagship"],
   ["squadron", "away detail"],
+  // V19.10 术语定案三词（与中文侧同构，自 stardeck 回流）：Army→Fleet /
+  // service log→bridge log / Headquarters→Flagship。
+  ["Army", "Fleet"],
+  ["service log", "bridge log"],
+  ["Headquarters", "Flagship"],
 ]

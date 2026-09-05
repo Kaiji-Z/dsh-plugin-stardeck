@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { activeCopy, plainCopy, setSkin, skinId, subscribeSkin, toggleSkin, trekCopy, warCopy, type SkinId } from '../src/client/copy.ts'
+import { activeCopy, plainCopy, setSkin, skinId, subscribeSkin, toggleSkin, trekCopy, trekifyText, warCopy, type SkinId } from '../src/client/copy.ts'
 
 /** 皮肤 store 是纯函数层（不引 react/node 专属 API）——node 直测；
  * localStorage 经 typeof 守卫，node 无 localStorage 时缺省星际迷航皮肤。
@@ -85,5 +85,27 @@ test('V16.4-R7 词汇收敛：同一概念每皮肤只有一个词面（败局=�
     assert.equal(c.columns.live.title, '执行中')
   } finally {
     setSkin('trek')
+  }
+})
+
+test('V19.10 术语定案+图例压缩（自 stardeck 5241694/4f0b428 回流）：HQ/执行者三向分野、图例两段', () => {
+  // HQ 三向：war=总部（原司令部/母舰修平）、plain=HQ、trek 经词表派生=星舰。
+  assert.equal(warCopy.starfield.hqOn, '总部在线——战时状态，全局开关亮着')
+  assert.equal(warCopy.starfield.returnHq, '返航 → 总部')
+  assert.equal(trekCopy.starfield.hqOn, '星舰在线——出航状态，全局开关亮着')
+  assert.equal(trekCopy.starfield.returnHq, '返航 → 星舰')
+  assert.equal(plainCopy.starfield.hqOn, '干活状态中——HQ亮着')
+  assert.equal(plainCopy.starfield.returnHq, '返回 → HQ')
+  // 执行者三向：war=指挥官（noBattle 泄漏修平，stardeck 同款）、plain=执行 Agent。
+  assert.equal(warCopy.commandBand.noBattle, '等指挥官领取')
+  assert.equal(plainCopy.lifecycle.waitingClaim, '等执行 Agent 领取')
+  assert.equal(plainCopy.focusPage.reportQueued, '等执行 Agent 接手，接手后这里播报进展')
+  // 词表新三词：总部→星舰 / 军队→舰队；序敏感——作战日志 必须派生 舰桥日志 而非 执行日志。
+  assert.equal(trekifyText('总部在线，军队出击，作战日志已写，作战继续'), '星舰在线，舰队出击，舰桥日志已写，执行继续')
+  // 图例压缩（4f0b428 同款）：三段并两段，砍 内环/铭牌读数 两个自解释段。
+  for (const s of [warCopy, plainCopy, trekCopy]) {
+    assert.equal(s.starfield.mapLegend.split(' ｜ ').length, 2)
+    assert.ok(!s.starfield.mapLegend.includes('内环'), 'legend must not mention 内环')
+    assert.ok(!s.starfield.mapLegend.includes('铭牌读数') && !s.starfield.mapLegend.includes('名牌读数'), 'legend must not mention readout')
   }
 })

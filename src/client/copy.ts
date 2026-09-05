@@ -531,7 +531,7 @@ export const warCopy: WarCopy = {
     retryBtn: '去看败因',
     scheduledHint: time => `定时下达 · ${time} 到点自动出发（此前不转达参谋）`,
     noGrade: '尚未分诊',
-    noBattle: '等执行者领取',
+    noBattle: '等指挥官领取',
     battleLine: n => `${n} 次作战`,
     noReport: '尚无战报',
     evChecks: '项验收通过',
@@ -734,10 +734,10 @@ export const warCopy: WarCopy = {
   },
   starfield: {
     aria: '战区：每片战场一颗星，战线环串起同战场的世代，执行部队绕星而行',
-    hqOn: '司令部在线——战时状态，全局开关亮着',
-    hqOff: '停战状态——司令部熄灯',
+    hqOn: '总部在线——战时状态，全局开关亮着',
+    hqOff: '停战状态——总部熄灯',
     orbIdle: '执行中',
-    mapLegend: '蓝动·琥珀等·绿善终·红败 ｜ 行星=战场（内环=最老）· 环=战线（分段=战线数）· 虚线追踪环=执行中 · 铭牌读数=兵数▸状态',
+    mapLegend: '蓝动·琥珀等·绿善终·红败 ｜ 行星=战场 · 环段=战线数 · 虚线追踪环=执行中',
     mapHintToast: '🪐 战场不止一个——试试战区视图（点此开启，⚙ 设置里随时可关）',
     mapHintDismiss: '忽略',
     controls: '左键拖拽平移 · 中键旋转 · 滚轮缩放 · 双击或 R 复位 · 悬停光点点亮战线',
@@ -788,7 +788,7 @@ export const warCopy: WarCopy = {
     sqTag: '执行编队',
     targetLabel: '目标战场',
     phaseLabel: '行动',
-    returnHq: '返航 → 母舰',
+    returnHq: '返航 → 总部',
     phOutbound: pct => `出击 · 进度 ${pct}%`,
     phBattle: verb => `作战中 · ${verb}`,
     phDeployed: '待验收 · 驻泊巡护',
@@ -1100,7 +1100,7 @@ export const plainCopy: WarCopy = {
     approvedAwaitingPublish: '任务待发布',
     planPending: '方案待你批',
     formingDrafting: '起草中',
-    waitingClaim: '等执行者领取',
+    waitingClaim: '等执行 Agent 领取',
     attemptN: n => `第 ${n} 次尝试`,
     chain: (done, total) => `任务组 ${done}/${total}`,
     cancelled: '已取消',
@@ -1155,7 +1155,7 @@ export const plainCopy: WarCopy = {
   },
   waitHint: {
     queued: n => `排队中——同一工作区前方还有 ${n} 个（不能同时执行）`,
-    awaitingClaim: '等待执行者领取',
+    awaitingClaim: '等待执行 Agent 领取',
     quotaPaused: '额度恢复中——已暂停，恢复后原任务继续（不重新开始）',
   },
   actions: { failToast: what => `${what}没有生效——服务器拒绝了（可能状态已变），稍后刷新重试`, jumpMissHint: '会话未跳转——该会话不在宿主目录里，请到工作区会话列表打开一次后再跳' },
@@ -1168,7 +1168,7 @@ export const plainCopy: WarCopy = {
       ['●', '绿 = 完成（已阅）', 'dot-done'],
       ['●', '红 = 失败（终败/熔断）', 'dot-fail'],
       ['◌', '圆环：同一个项目的多轮任务（点=第几轮）；一色=一条线，换个项目续接会另起一条新线'],
-      ['！', '新任务，等待执行者领取'],
+      ['！', '新任务，等待执行 Agent 领取'],
       ['？', '结果已提交，等待你验收'],
       ['◎', '只看这条：高亮相关任务与会话，其余变淡，Esc 退出'],
       ['↩', '来源 chip：点它跳回源命令的详情'],
@@ -1246,10 +1246,10 @@ export const plainCopy: WarCopy = {
   },
   starfield: {
     aria: '项目全景：每个项目一颗星球，正在干活的任务绕圈转',
-    hqOn: '干活状态中——总部亮着',
+    hqOn: '干活状态中——HQ亮着',
     hqOff: '当前没有激活的事项线',
     orbIdle: '进行中',
-    mapLegend: '蓝=干活·琥珀=等你·绿=完成·红=失败 ｜ 星球=项目（内环=最早）· 环=同一条线（点=第几轮）· 虚线环=进行中 · 名牌读数=人数▸状态',
+    mapLegend: '蓝=干活·琥珀=等你·绿=完成·红=失败 ｜ 星球=项目 · 环段=几条线 · 虚线环=正干着',
     mapHintToast: '🪐 项目不止一个——试试全景图视图（点这里打开，⚙ 设置里可以关掉）',
     mapHintDismiss: '忽略',
     controls: '左键拖动平移 · 中键转视角 · 滚轮缩放 · 双击或 R 回正 · 悬停亮点查看关联',
@@ -1300,7 +1300,7 @@ export const plainCopy: WarCopy = {
     sqTag: '干员',
     targetLabel: '目标项目',
     phaseLabel: '近况',
-    returnHq: '返回 → 总部',
+    returnHq: '返回 → HQ',
     phOutbound: pct => `出发 · 进度 ${pct}%`,
     phBattle: verb => `进行中 · ${verb}`,
     phDeployed: '干完了 · 等确认',
@@ -1378,7 +1378,7 @@ export const plainCopy: WarCopy = {
     reportLatest: '最新汇报',
     reportNone: '还没有汇报——收官后这里给结论原文',
     reportLive: (verb, n, when) => `进行中 · ${verb} · 第 ${n} 次 · 从${when}开始`,
-    reportQueued: '等执行者接手，接手后这里播报进展',
+    reportQueued: '等执行 Agent 接手，接手后这里播报进展',
     reportSettledSoon: '上一轮已结束，结果整理后会放在这里',
     taskSessionBtn: '任务会话',
     execSessionBtn: '执行会话',
@@ -1520,6 +1520,11 @@ const TREK_LEXICON: ReadonlyArray<readonly [string, string]> = [
   ['战报', '任务回报'],
   ['母舰', '星舰'],
   ['司令部', '星舰'],
+  // V19.10 术语定案三词（舰长定，自 stardeck 回流）：军队→舰队 / 作战日志→舰桥日志 /
+  // 总部→星舰。顺序敏感：作战日志 必须排在 ['作战','执行'] 之前，否则派生「执行日志」。
+  ['军队', '舰队'],
+  ['作战日志', '舰桥日志'],
+  ['总部', '星舰'],
   ['作战室', '舰桥'],
   ['作战', '执行'],
   ['战区', '星域'],
@@ -1554,7 +1559,8 @@ const TREK_FIXUPS: ReadonlyArray<readonly [string, string]> = [
   ['行星=星球', '行星=工作区'],
 ]
 
-function trekifyText(value: string, lexicon: ReadonlyArray<readonly [string, string]> = TREK_LEXICON, fixups: ReadonlyArray<readonly [string, string]> = TREK_FIXUPS): string {
+/** 导出仅供机测（tests/skin.test.ts）：序敏感词条（作战日志 先于 作战）无活体词面可断言。 */
+export function trekifyText(value: string, lexicon: ReadonlyArray<readonly [string, string]> = TREK_LEXICON, fixups: ReadonlyArray<readonly [string, string]> = TREK_FIXUPS): string {
   let out = value
   for (const [from, to] of lexicon) out = out.split(from).join(to)
   for (const [from, to] of fixups) out = out.split(from).join(to)

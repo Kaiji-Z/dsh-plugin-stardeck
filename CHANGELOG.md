@@ -16,6 +16,9 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 
 ## [Unreleased]
 
+### Removed
+- **任务卡处理钮全撤（对齐 stardeck V19.6/V19.6续 的卡面收敛终态）**：①任务列卡面「去验收/去下重试令」钮退役（V20 时改为路由聚焦页段，本轮照 stardeck 更彻底——点卡本体即达聚焦页对应段，卡载钮与之同靶纯属冗余）；②聚焦页链上任务面板与任务回报段的同款跳大副会话钮退役（与底部 ⌁ 任务会话跳钮同靶；该定夺位由播种钮接位，见下条）。TaskCard 摘 onHandle 参、词典 taskCard 退役 handleReview/handleReviewTitle/handleRetry/handleRetryTitle 四键×4 皮肤（EN 键形锁两侧同删）；verify 两正断针脚翻负断言（防复活）。DOM 探针 probe-sd-boardread.py 翻新 5/5（卡面零处理钮/点卡落聚焦页 report 段）。
+
 ### Added
 - **V19.9 可读性三件（回流自 stardeck 0ec08ea）**：①岛 ✉ 徽标分性质——计数后缀内联四类标记（军事 阅/批/答/试、平话 看/批/答/试，trek 派生随词表），悬停给全称「收件箱 N 件：待翻阅任务回报 2 · …」——「等我什么」从开浮层降为零跳；②灵动岛全局活动脉搏——`.war-island-pulse` 播「最近动静 X 前」（全板最新时间戳=命令/任务/战报/尝试取 max 的 relTime，弱于计数的 text-3 灰），与到访摘要互补（那是「你不在时变了什么」，这是「离现在多近还有生命」）；③聚焦页任务回报段未展开态结论预览——`.war-report-preview` 显示战报首句 64 字+悬停全文，预览≠翻阅（markReportSeen 仍只在点开时落，V9.12 三通道不撤）。词典 island 增 3 键、focusPage 增 1 键（×4 皮肤含 EN）。DOM 探针 scripts/probe-sd-v199.py 4/4（徽标后缀+悬停全称/脉搏 relTime/预览 trek 派生词面/零 pageerror）。verify PASS。
 

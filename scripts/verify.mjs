@@ -262,9 +262,7 @@ gate('bundle', () => {
     // V9.12 R1 事件流复活：任务回报自动记账解析抽纯函数 + 活动表最旧 ts 驱逐。
     [host, 'parseUnitReportEvent', 'report-capture parsing extracted (nested .data first)'],
     [host, 'Background subagent', 'unit-report child-id regex survives in the parser'],
-    // V9.12 R2 ① 待定夺动作正名：reported 链去验收 / 败链去下重试令。
-    [client, '去验收 · 参谋会话', 'review action copy (reported chains; V16 词典源=军事串，trek 皮肤运行时派生)'],
-    [client, '去下重试令 · 参谋会话', 'retry-order action copy (failed chains; 词典源=军事串)'],
+    // V20+回流 stardeck V19.6：卡面只留导航——正断针脚随钮同退，负断言防复活。
     // V9.12 R2 ⑥ 跳转无操作反馈。
     [client, 'jumpMissHint', 'cold-session jump no-op surfaces a warning'],
     // V9.12 R2 ⑦ 织换真实目录守卫。
@@ -484,6 +482,9 @@ gate('bundle', () => {
     { ok: !client.includes('openTasks'), label: 'V9.11: task ledger is no longer filtered to open tasks' },
     // V9.12 R2 ① negative face：旧「去处理」一刀切文案休眠——语义分野成正名后的两词。
     { ok: !client.includes('去处理 · 参谋会话'), label: 'V9.12: blanket handle copy stays retired (review/retry own their words)' },
+    // V20+回流 stardeck V19.6续：卡面只留导航——去验收/去下重试令处理钮全撤
+    // （点卡即达聚焦页对应段，会话直达归聚焦页跳钮）；负断言防复活。
+    { ok: !client.includes('去验收 · 参谋会话') && !client.includes('去下重试令 · 参谋会话'), label: 'V20: card handle buttons stay retired (click-through owns navigation)' },
     (() => {
       const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
       const decl = pkg.dsh?.client ?? {}

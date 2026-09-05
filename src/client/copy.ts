@@ -267,7 +267,6 @@ export interface WarCopy {
     taskIdTitle: string
     failReason: (e: string) => string
     failTitle: string
-    handle: string
   }
   grade: Record<'L0' | 'L1' | 'L2', string>
   /** V10 战线链身份：世代徽标悬停语 / 族谱面包屑 aria / 续接模式正名。 */
@@ -717,10 +716,6 @@ export const warCopy: WarCopy = {
     taskIdTitle: '任务单 ID（溯源用）',
     failReason: e => `败因：${e}`,
     failTitle: '重试已用尽，等元首让参谋重新立案',
-    handleReview: '去验收 · 参谋会话',
-    handleReviewTitle: '翻阅战报在本页；验收通过或驳回，结论到参谋会话说',
-    handleRetry: '去下重试令 · 参谋会话',
-    handleRetryTitle: '重试授权在参谋会话说——板是读投影，发令走参谋',
   },
   grade: { L0: 'L0 直发', L1: 'L1 呈批', L2: 'L2 澄清' },
   chain: {
@@ -1235,10 +1230,6 @@ export const plainCopy: WarCopy = {
     taskIdTitle: '任务编号（溯源用）',
     failReason: e => `失败原因：${e}`,
     failTitle: '重试已用尽，等规划 Agent 重新立案',
-    handleReview: '去验收 · 规划 Agent 会话',
-    handleReviewTitle: '翻阅汇报在本页；验收通过或驳回，结论到规划 Agent 会话说',
-    handleRetry: '去下重试令 · 规划 Agent 会话',
-    handleRetryTitle: '重试授权在规划 Agent 会话说——板是只读的，发令走规划 Agent',
   },
   grade: { L0: 'L0 直发', L1: 'L1 呈批', L2: 'L2 澄清' },
   chain: {

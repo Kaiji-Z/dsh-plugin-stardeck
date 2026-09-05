@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""板面收敛 DOM 探针（舰长令「卡面只留导航，动作归聚焦页定夺点」）：
+"""板面收敛 DOM 探针（舰长令「卡面只留导航，动作归聚焦页定夺点」+ V20 对齐 stardeck V19.6续）：
 
 1. 全板卡面零账面变更钮：.war-preflight-btn（改直发）与 .war-enter-btn（进入对话）
    计数==0（聚焦页 talking ghost 面板的进入对话回答钮不在卡面，list 视图本就不开聚焦页）。
-2. 任务卡「去验收」处理钮点击 → 落聚焦页 report 段（决策带所在），不再是直跳会话。
+2. 任务卡处理钮全撤（stardeck V19.6续：点卡即达）——任务列卡面 .war-btn.primary 计数==0；
+   点 reported/failed 任务卡本体 → 落聚焦页（report/chain 段在场）。
 """
 import asyncio, sys
 from playwright.async_api import async_playwright
@@ -33,27 +34,28 @@ async def main():
         n_enter = await pg.evaluate("() => document.querySelectorAll('.war-enter-btn').length")
         ok('card faces: zero 改直发 buttons', n_pre == 0, f'count={n_pre}')
         ok('card faces: zero 进入对话 buttons', n_enter == 0, f'count={n_enter}')
-        focus_btns = await pg.evaluate("() => document.querySelectorAll('.war-focus-btn').length")
-        ok('card faces: ◎ focus (navigation) still present', focus_btns > 0, f'count={focus_btns}')
 
-        # 任务卡处理钮：去验收（reported）/ 去下重试令（failed）→ 聚焦页对应段
-        handle = pg.locator('.war-zone.war-tasks .war-card .war-btn.primary', has_text='去验收').first
-        clicked = 'report'
-        if await handle.count() == 0:
-            handle = pg.locator('.war-zone.war-tasks .war-card .war-btn.primary', has_text='去下重试令').first
-            clicked = 'battle'
-        if await handle.count() == 0:
-            ok('handle button present on task card', False, 'no 去验收/去下重试令 card found')
+        # V20+stardeck V19.6续：任务卡处理钮全撤（负断言）。
+        n_handle = await pg.evaluate("() => document.querySelectorAll('.war-zone.war-tasks .war-card .war-btn.primary').length")
+        ok('task-card faces: zero handle buttons (去验收/去下重试令 retired)', n_handle == 0, f'count={n_handle}')
+
+        # 点卡即达聚焦页：点一张 reported/failed 任务卡本体 → 聚焦页 report/chain 段在场。
+        clicked = await pg.evaluate("""() => {
+          const cards = [...document.querySelectorAll('.war-zone.war-tasks .war-card')]
+          const t = cards.find(c => c.querySelector('.st-reported') || c.querySelector('.st-failed'))
+          if (t) { t.click(); return t.querySelector('.st-reported') ? 'report' : 'chain' }
+          return null
+        }""")
+        if clicked is None:
+            ok('reported/failed task card found on board', False, 'seed board has none in active tab')
         else:
-            await handle.click()
             await pg.wait_for_timeout(900)
             modal = await pg.evaluate("""() => {
               const m = document.querySelector('.war-modal')
-              return m ? { open: true, report: !!m.querySelector("[data-stage='report']"), battle: !!m.querySelector("[data-stage='battle']") } : { open: false }
+              return m ? { open: true, report: !!m.querySelector("[data-stage='report']"), battle: !!m.querySelector("[data-stage='battle']"), task: !!m.querySelector("[data-stage='task']") } : { open: false }
             }""")
-            seg = modal.get(clicked, False)
-            ok('handle click lands on focus page', modal['open'] is True, json.dumps(modal))
-            ok(f'handle click lands on {clicked} decision segment', seg is True, json.dumps(modal))
+            ok('card click lands on focus page', modal.get('open') is True, str(modal))
+            ok(f'card click reaches {clicked} segment', modal.get(clicked, False) is True, str(modal))
         await browser.close()
 
     fails = [n for n, c, _ in items if not c]

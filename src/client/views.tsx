@@ -5,8 +5,9 @@
  * command's focus page (聚焦页 — a lifecycle tour that pulls the main-UI
  * cards into one window); there are no per-task/per-session detail modals
  * anymore. Battlefield cards jump via sessions.open (live cards direct,
- * settled cards through the tour's report stage); reported/failed task cards
- * also carry a 「去验收/去下重试令」 shortcut to the owning command's staff conversation.
+ * settled cards through the tour's report stage); task cards carry no action
+ * buttons — clicking lands on the owning command's focus page (card face keeps
+ * navigation only, V20 + stardeck V19.6).
  * @module dsh-plugin-stardeck/client/views
  */
 
@@ -1245,7 +1246,7 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
     )
   }
   // 链上任务卡的展开（V9.10 补全）：命令级最终计划（若有）+ 该环任务书 + 验收
-  // 标准；reported/failed 环给「去验收/去下重试令」直达大副会话（与主界面任务卡同动作）。
+  // 标准（V20+stardeck V19.6：处理跳钮撤除——动作归聚焦页定夺点与会话跳钮）。
   const taskPanel = (t: BoardTask, key?: string): ReactNode => {
     // V19 铺面回流：任务级两位点（计划/任务书）路径链化到该任务工作区的板内预览。
     const taskFileLink = t.workspacePath !== null && t.workspacePath !== ''
@@ -1260,13 +1261,6 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
       : null,
     subRow(fp.taskBrief, t.brief !== '' ? reportBody(t.brief, taskFileLink) : fp.briefMissing),
     subRow(fp.taskAcceptance, t.acceptance !== '' ? t.acceptance : fp.acceptanceMissing),
-    (t.status === 'reported' || t.status === 'failed') && staffTarget !== null
-      ? subActions([createElement('button', {
-          className: 'war-btn primary',
-          title: t.status === 'failed' ? activeCopy().taskCard.handleRetryTitle : activeCopy().taskCard.handleReviewTitle,
-          onClick: () => { jumpSession(staffTarget) },
-        }, t.status === 'failed' ? activeCopy().taskCard.handleRetry : activeCopy().taskCard.handleReview)])
-      : null,
     )
   }
   return createElement('div', { className: 'war-modal-backdrop', onClick: onClose },
@@ -1417,7 +1411,7 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
             ...chain.map(t => [
               TaskCard(t, statuses,
                 () => { setOpen(o => o !== null && o.kind === 'plan' && o.taskId === t.taskId ? null : { kind: 'plan', taskId: t.taskId }) },
-                null, null, () => {}, NO_TRACE),
+                null, () => {}, NO_TRACE),
               open !== null && open.kind === 'plan' && open.taskId === t.taskId ? taskPanel(t, `panel-${t.taskId}`) : null,
             ]),
             ghostVariant !== null
@@ -1475,8 +1469,9 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
                     reportBody(lastReport.r.text, reportHost !== undefined && reportHost.workspacePath ? ((n) => { setPreview({ ws: reportHost.workspacePath!, name: n }) }) : undefined),
                   )) : null,
                   evSummary !== null && lastReport?.r.evidence !== null && lastReport?.r.evidence !== undefined ? Fold(evSummary, [EvidenceBlock(lastReport.r.evidence!)]) : null,
-                  // V9.10 收获三件：任务产出/交付物 + 历次执行会话（逐次可跳）+ 待定夺动作
-                  // （V9.12 正名：reported 链→去验收 / 败链→去下重试令，都落大副会话）。
+                  // V9.10 收获三件：任务产出/交付物 + 历次执行会话（逐次可跳）。
+                  // （V20+stardeck V19.6：跳大副会话的处理钮退役——验收/重试经
+                  // 会话跳钮与播种令走，动作住在定夺面上。）
                   reportHost !== undefined && reportHost.deliverables.length > 0
                     ? subRow(fp.lootLabel, createElement('span', { className: 'war-loot' },
                       reportHost.deliverables.flatMap((d, i) => {
@@ -1504,13 +1499,8 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
                       createElement('span', { className: 'war-time' }, relTime(a.startedAt)),
                       ))))
                     : null,
-                  (lastReport !== undefined && chain.some(t => t.status === 'reported') || failedChain) && staffTarget !== null
-                    ? subActions([createElement('button', {
-                        className: 'war-btn primary',
-                        title: failedChain ? activeCopy().taskCard.handleRetryTitle : activeCopy().taskCard.handleReviewTitle,
-                        onClick: () => { jumpSession(staffTarget) },
-                      }, failedChain ? activeCopy().taskCard.handleRetry : activeCopy().taskCard.handleReview)])
-                    : null,
+                  // V20+stardeck V19.6：「去验收/去下重试令」跳大副会话钮退役——
+                  // 与底部 ⌁ 任务会话跳钮同靶；定夺动作由批B 播种钮接位。
                   // V10 续接入口：任务回报读完即续——关展开、开起草器并预选本命令为母本。
                   onContinue !== undefined
                     ? subActions([createElement('button', {
@@ -1594,7 +1584,7 @@ function FormingCard(cmd: BoardCommand, variant: 'plan' | 'talking' | 'drafting'
   )
 }
 
-function TaskCard(task: BoardTask, statuses: Map<string, BoardTask['status']>, onOpen: (taskId: string) => void, onHandle: (() => void) | null, lineageCmd: BoardCommand | null, onOpenCommand: (commandId: string) => void, trace: CardTrace, /** V14.1 单代战线星球身份（任务列传参；其他调用点不传不渲染）。 */ bf?: string | null): ReactNode {
+function TaskCard(task: BoardTask, statuses: Map<string, BoardTask['status']>, onOpen: (taskId: string) => void, lineageCmd: BoardCommand | null, onOpenCommand: (commandId: string) => void, trace: CardTrace, /** V14.1 单代战线星球身份（任务列传参；其他调用点不传不渲染）。 */ bf?: string | null): ReactNode {
   // V9.11 台账终局态：closed/failed 任务书卡常驻任务列但调暗；reported 是待验收
   // 动作态（收件箱有待办），保持全亮不许被埋。
   const settled = task.status === 'closed' || task.status === 'failed'
@@ -1641,15 +1631,8 @@ function TaskCard(task: BoardTask, statuses: Map<string, BoardTask['status']>, o
       ? createElement('div', { className: 'war-waithint' }, activeCopy().waitHint.quotaPaused)
       : null,
     task.status === 'failed' && task.lastError !== null ? createElement('div', { className: 'war-fail', title: activeCopy().taskCard.failTitle }, activeCopy().taskCard.failReason(task.lastError)) : null,
-    onHandle !== null
-      ? createElement('div', { className: 'war-card-top' },
-        createElement('button', {
-          className: 'war-btn primary',
-          title: task.status === 'failed' ? activeCopy().taskCard.handleRetryTitle : activeCopy().taskCard.handleReviewTitle,
-          onClick: e => { e.stopPropagation(); onHandle() },
-        }, task.status === 'failed' ? activeCopy().taskCard.handleRetry : activeCopy().taskCard.handleReview),
-      )
-      : null,
+    // 卡面只留导航（V20 收敛 + 对齐 stardeck V19.6续）：处理钮全撤——点卡即达
+    // 聚焦页对应段（reported→report/failed→chain），会话直达在聚焦页底部跳钮。
   )
 }
 
@@ -2921,15 +2904,6 @@ export function warView(services: ClientServicesFace): () => ReactNode {
     // V9.11 任务列=大副侧台账 + V13 Phase B 战线分组：多代战线一组（链色头+代数+
     // 聚合态，成形卡归组首），单代/孤儿保持原排序心智；组与扁平项按最近活动交错。
     const taskCardOf = (t: BoardTask): ReactNode => TaskCard(t, statuses, openTaskVia,
-      (t.status === 'reported' || t.status === 'failed') && staffFor(t.taskId) !== null
-        ? () => {
-            // 板面收敛（舰长令）：处理钮落聚焦页定夺段（与收件箱同映射）——
-            // reported→report 段（去验收决策带）/ failed→chain 段（决重试），
-            // 会话直达降级为聚焦页底部跳钮。
-            const lc = lineageOf(t.taskId)
-            if (lc !== null) openCommand(lc.commandId, t.status === 'reported' ? 'report' : 'chain')
-          }
-        : null,
       lineageOf(t.taskId), openCommand, traceFor(lineageOf(t.taskId)?.commandId ?? null),
       (() => { const f = taskFront.get(t.taskId); return f !== undefined ? bfNameOf(f.battlefield) : null })())
     const tasksSorted = [...tabTasks].sort((a, b) => {

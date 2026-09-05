@@ -356,10 +356,6 @@ export const enWarCopy: WarCopy = {
     "taskIdTitle": "Task ID (for traceability)",
     "failReason": e=>`Cause of defeat: ${e}`,
     "failTitle": "Retries exhausted — waiting for the Sovereign to have staff re-open the case",
-    "handleReview": "Send back · Staff session",
-    "handleReviewTitle": "Reject this report — deliver your rework note in the staff session (acceptance uses the close button)",
-    "handleRetry": "Issue retry order · Staff session",
-    "handleRetryTitle": "Retry authorization is given in the staff session — the board is a read projection; orders go through staff"
   },
   "grade": {
     "L0": "L0 direct",
@@ -1065,11 +1061,7 @@ export const enPlainCopy: WarCopy = {
     "attemptNTitle": "Attempt count including auto re-dispatches",
     "taskIdTitle": "Task ID (for traceability)",
     "failReason": e=>`Failure reason: ${e}`,
-    "failTitle": "Retries exhausted — waiting for the Planning Agent to re-open the case",
-    "handleReview": "Send back · Planning Agent session",
-    "handleReviewTitle": "Reject this report — deliver your rework note in the Planning Agent session (acceptance uses the close button)",
-    "handleRetry": "Issue retry order · Planning Agent session",
-    "handleRetryTitle": "Retry authorization is given in the Planning Agent session — the board is read-only; orders go through the agent"
+    "failTitle": "Retries exhausted — waiting for the Planning Agent to re-open the case"
   },
   "grade": {
     "L0": "L0 direct",

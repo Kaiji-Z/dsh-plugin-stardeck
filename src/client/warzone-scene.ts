@@ -92,6 +92,15 @@ export function wzStatusText(status: WzStatus, sf: { wzStWait: string; wzStBattl
   return status === 'wait' ? sf.wzStWait : status === 'battle' ? sf.wzStBattle : sf.wzStHeld
 }
 
+/** V19.5 铭牌状态读数（纯函数，tests 管辖）：星球生命周期四态 → 铭牌下挂读数词。
+ *  active/settled/idle 走词典，failed 给 ✕N（N=败记数，无败记兜 1——失败即成立）。 */
+export function tacStatusWord(state: WzPlanetState, failing: number, sf: { wzStWait: string; wzStBattle: string; wzStHeld: string }): string {
+  return state === 'active' ? sf.wzStBattle
+    : state === 'settled' ? sf.wzStHeld
+    : state === 'failed' ? `✕${failing > 0 ? failing : 1}`
+    : sf.wzStWait
+}
+
 export interface WzPlanetSpec {
   readonly index: number
   readonly cls: WzClass
@@ -2532,10 +2541,7 @@ export class WarzoneTactical {
       g.fillStyle = a.isHl ? P.nameHl : a.col
       g.fillText(nm, place.tx, place.ly - 6)
       ;(g as unknown as { letterSpacing?: string }).letterSpacing = '0px'
-      const statusWord = a.p.state === 'active' ? sf.wzStBattle
-        : a.p.state === 'settled' ? sf.wzStHeld
-        : a.p.state === 'failed' ? `✕${a.p.failing > 0 ? a.p.failing : 1}`
-        : sf.wzStWait
+      const statusWord = tacStatusWord(a.p.state, a.p.failing, sf)
       const read = `${a.p.garrison > 0 ? `${a.p.garrison}▸` : ''}${statusWord}`
       g.font = '9px Consolas,"Microsoft YaHei"'; g.fillStyle = P.name
       g.fillText(read, place.tx, place.ly + 7)

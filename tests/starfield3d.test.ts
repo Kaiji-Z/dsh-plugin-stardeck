@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { archetypeOf, attemptPhaseOf, clampCam, dampCam, ease, pad2, planetNoise, planCallouts, qbez, truncateForArc, warLogOf, warzoneLayoutFor, warzonePlanets, WZ_CAM_DIST_MAX, WZ_CAM_DIST_MIN, WZ_CAM_HOME, WZ_CAM_PITCH_MAX, WZ_CAM_PITCH_MIN, wzCamBounds, wzStatusText } from '../src/client/warzone-scene.ts'
+import { archetypeOf, attemptPhaseOf, clampCam, dampCam, ease, pad2, planetNoise, planCallouts, qbez, tacStatusWord, truncateForArc, warLogOf, warzoneLayoutFor, warzonePlanets, WZ_CAM_DIST_MAX, WZ_CAM_DIST_MIN, WZ_CAM_HOME, WZ_CAM_PITCH_MAX, WZ_CAM_PITCH_MIN, wzCamBounds, wzStatusText } from '../src/client/warzone-scene.ts'
 
 /** V11.4 warzone demo 移植的纯函数面：星球布局确定性（红线①——同种子恒同貌，
  * SSE 零抖动、探针可断言的根基）+ 贝塞尔航迹几何。 */
@@ -189,4 +189,13 @@ test('sd 回流：planCallouts 引线铭牌摆放（侧别朝盘外/同侧堆叠
   const qe = pe.get('e')!
   assert.equal(qe.align, 'right', '越出右界即翻侧')
   assert.ok(qe.tx - 40 >= 0, '翻侧后文本左缘仍在安全区内')
+})
+
+test('sd 回流补强：tacStatusWord 铭牌状态读数四态（failed 给 ✕N、无败记兜 1）', () => {
+  const sf = { wzStWait: '待进攻', wzStBattle: '执行中', wzStHeld: '已占领' }
+  assert.equal(tacStatusWord('active', 0, sf), '执行中')
+  assert.equal(tacStatusWord('settled', 2, sf), '已占领')
+  assert.equal(tacStatusWord('idle', 0, sf), '待进攻')
+  assert.equal(tacStatusWord('failed', 0, sf), '✕1', '败记 0 兜 1——失败即成立')
+  assert.equal(tacStatusWord('failed', 3, sf), '✕3', '败记数进读数')
 })

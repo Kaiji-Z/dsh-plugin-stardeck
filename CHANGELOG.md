@@ -16,6 +16,12 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 
 ## [Unreleased]
 
+### Changed
+- **zh 侧星域图例词面跟上 V19.5 雷达机制**（军事+平话两皮肤）：「✓凯旋 · 呼吸光点=执行中」→「虚线追踪环=执行中 · 铭牌读数=兵数▸状态」（平话「虚线环=进行中 · 名牌读数=人数▸状态」）——V19.5 回流已把 2D 雷达的扩散脉冲/驻军弧退役成旋转虚线追踪环+引线铭牌读数，EN 词典（随 stardeck 来）早已是新机制描述，zh 源串此次补齐；trek 派生随词表自动跟。
+
+### Added
+- **雷达四态读数抽纯函数 `tacStatusWord`**（自绘制壳内联表达式升格，tests 管辖）：active/settled/idle 走词典、failed 给 ✕N（无败记兜 1）——tests/starfield3d 补四态断言（含 ✕1 兜底与 ✕N 败记数），「雷达四态测试」判据至此完整。AGENTS 坑录补 sd 回流四坑（双轴订阅成对接/探针 localStorage 先写再 reload/路由拦截 await resp.json()+线端点语义/种子板档位全 active 的断言前提）。
+
 ## [0.20.2] - 2026-09-04
 
 ### Added

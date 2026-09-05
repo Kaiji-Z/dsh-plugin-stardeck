@@ -266,11 +266,13 @@ test('V19 回流·workspace/file+reveal 只读端点：守卫四拒/封顶/二�
   const warRoot = mkdtempSync(join(tmpdir(), 'warroom-wsroot-'))
   const ws = join(warRoot, 'task-a')
   mkdirSync(ws, { recursive: true })
+  mkdirSync(join(warRoot, 'state'), { recursive: true })
   writeFileSync(join(ws, 'ok.md'), '# 标题\n\n正文一段。', 'utf8')
   writeFileSync(join(ws, 'bin.dat'), Buffer.concat([Buffer.alloc(10), Buffer.from([0]), Buffer.from('rest')]))
   writeFileSync(join(ws, 'big.log'), 'x'.repeat(512 * 1024 + 1), 'utf8')
   const outside = mkdtempSync(join(tmpdir(), 'warroom-outside-'))
-  const h = makeHandler({ warRoot })
+  const outside2 = mkdtempSync(join(tmpdir(), 'warroom-outside2-'))
+  const h = makeHandler({ warRoot, stateDir: join(warRoot, 'state') })
   try {
     const get = (wsQ: string, nameQ: string): Promise<{ code: number; body: any }> =>
       call(h.handler, { method: 'GET', url: `/warroom/api/workspace/file?ws=${encodeURIComponent(wsQ)}&name=${encodeURIComponent(nameQ)}` })
@@ -299,10 +301,22 @@ test('V19 回流·workspace/file+reveal 只读端点：守卫四拒/封顶/二�
     const bin = await get(ws, 'bin.dat')
     assert.equal(bin.body.binary, true)
     assert.equal(bin.body.content, '')
+    // 插件形态适配（2026-09-05）：注册星球=账本授权面——war_root 外的真实目录
+    // 经 POST /planets 注册后可读；name 相对+不越 ws 的闸对注册星球照旧生效。
+    writeFileSync(join(outside, 'reg.md'), '# 注册星产物\n', 'utf8')
+    const reg = await call(h.handler, postReq('/warroom/api/planets', { path: outside, title: '外域星' }))
+    assert.equal(reg.body.ok, true)
+    const regFile = await get(outside, 'reg.md')
+    assert.equal(regFile.body.ok, true)
+    assert.match(regFile.body.content, /注册星产物/)
+    const regTrav = await get(outside, '../x.md')
+    assert.equal(regTrav.body.ok, false)
+    assert.match(regTrav.body.error, /穿越/)
     // reveal 守卫：ws 越界拒（不真开资源管理器——只测拒绝面）。
     let revBody = ''
     const revRes = { setHeader: () => {}, write: () => true, end: (b?: string) => { revBody = b ?? '' }, on: () => {} }
-    await h.handler(postReq('/warroom/api/workspace/reveal', { ws: outside, name: '' }), revRes)
+    // outside 已注册（上方适配测试）——reveal 拒绝面改用未注册目录，别真开资源管理器。
+    await h.handler(postReq('/warroom/api/workspace/reveal', { ws: outside2, name: '' }), revRes)
     const revOut = { body: JSON.parse(revBody) }
     assert.equal(revOut.body.ok, false)
     assert.match(revOut.body.error, /war_root/)

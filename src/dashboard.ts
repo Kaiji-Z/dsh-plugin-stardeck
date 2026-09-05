@@ -356,10 +356,10 @@ export function traceProjection(
  */
 /**
  * V19 战报可读性回流（stardeck）：产物板内预览的双重限界守卫——ws 须在 war_root
- * 管辖内、name 须是 ws 内的相对路径（绝对路径/`..` 穿越/跨任务串门全拒）。
- * 纯函数，dashboard-routes 测试直测。
+ * 管辖内（或为账本注册星球，见下）、name 须是 ws 内的相对路径（绝对路径/`..`
+ * 穿越/跨任务串门全拒）。纯函数，dashboard-routes 测试直测。
  */
-export function workspaceFileGuardError(warRoot: string, ws: string, name: string): string | null {
+export function workspaceFileGuardError(warRoot: string, ws: string, name: string, allowedAbs: ReadonlyArray<string> = []): string | null {
   if (ws.trim() === '' || name.trim() === '') return '缺少工作区或文件名参数'
   // name 必须是相对路径：绝对路径（盘符/根斜杠）显式拒绝——join 不重置绝对段，
   // 会拼出「ws/C:/x」这类怪路径（stat 必败），语义上仍按穿越面拒掉。
@@ -368,7 +368,11 @@ export function workspaceFileGuardError(warRoot: string, ws: string, name: strin
   const wsAbs = resolve(ws)
   const file = resolve(join(wsAbs, name))
   const inside = (base: string, target: string): boolean => target === base || target.startsWith(base + sep)
-  if (!inside(root, wsAbs)) return '该工作区不在 war_root 管辖内，拒绝访问'
+  // 插件形态适配（2026-09-05 勘误，批2 回流照搬了 daemon 前提）：daemon 里受管
+  // 工作区全在 war_root 下，插件形态的注册星球是任意用户目录——**账本注册面即
+  // 授权面**（allowedAbs=注册星球 resolve 集）；war_root 包含只覆盖沙盒自建工作
+  // 区。name 相对+不越 wsAbs 两道闸对两类一视同仁。
+  if (!inside(root, wsAbs) && !allowedAbs.includes(wsAbs)) return '该工作区不在 war_root 管辖内，拒绝访问'
   if (!inside(wsAbs, file)) return '文件路径越出工作区（拒绝路径穿越）'
   return null
 }
@@ -420,7 +424,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
         const q = new URL(r.url ?? '/', 'http://local').searchParams
         const ws = q.get('ws') ?? ''
         const name = q.get('name') ?? ''
-        const guardErr = workspaceFileGuardError(deps.warRoot, ws, name)
+        const guardErr = workspaceFileGuardError(deps.warRoot, ws, name, loadPlanets(deps.stateDir).map(p => resolve(p.path)))
         if (guardErr !== null) { send(403, { ok: false, error: guardErr }); return }
         const file = resolve(join(resolve(ws), name))
         try {
@@ -441,11 +445,12 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
         const body = JSON.parse(await readBody(r)) as { ws?: unknown; name?: unknown }
         const ws = typeof body.ws === 'string' ? body.ws : ''
         const name = typeof body.name === 'string' ? body.name : ''
-        const guardErr = workspaceFileGuardError(deps.warRoot, ws, name === '' ? 'x' : name)
+        const allowedAbs = loadPlanets(deps.stateDir).map(p => resolve(p.path))
+        const guardErr = workspaceFileGuardError(deps.warRoot, ws, name === '' ? 'x' : name, allowedAbs)
         if (guardErr !== null && name === '') {
           if (ws.trim() === '') { send(403, { ok: false, error: '缺少工作区参数' }); return }
           const root = resolve(deps.warRoot), wsAbs = resolve(ws)
-          if (!(wsAbs === root || wsAbs.startsWith(root + sep))) { send(403, { ok: false, error: '该工作区不在 war_root 管辖内，拒绝访问' }); return }
+          if (!(wsAbs === root || wsAbs.startsWith(root + sep) || allowedAbs.includes(wsAbs))) { send(403, { ok: false, error: '该工作区不在 war_root 管辖内，拒绝访问' }); return }
         } else if (guardErr !== null) { send(403, { ok: false, error: guardErr }); return }
         const target = name === '' ? resolve(ws) : resolve(join(resolve(ws), name))
         let dir = target

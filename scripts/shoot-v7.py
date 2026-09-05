@@ -140,7 +140,8 @@ with sync_playwright() as p:
 
     pre = page.locator(".war-preflight")
     assert pre.count() == 1, f"preflight row expected on the L1 plan-pending command, got {pre.count()}"
-    assert page.locator(".war-preflight-btn", has_text="改直发").count() == 1, "preflight 改直发 action missing"
+    # 板面收敛（舰长令「卡面只留导航」）：改直发钮退役——preflight 行退为纯读提示，动作在聚焦页配置段。
+    assert page.locator(".war-preflight-btn").count() == 0, "preflight 改直发 button should be retired from card faces"
 
     # V9 结构断言：三列局势墙 + 底部命令调度条（命令不再是列）。
     assert page.locator(".war-ops").count() == 1, "ops wall grid container missing"

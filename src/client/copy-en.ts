@@ -176,7 +176,6 @@ export const enWarCopy: WarCopy = {
   "preflight": {
     "hint": "Will stall at plan-approval — nobody approves at night",
     "hintTalking": "Answer the Staff Officer first, then approve the plan — both steps before it proceeds; unattended at night it stalls until morning",
-    "toDirect": "Switch to direct order",
     "title": "Commands graded L1/L2 wait for your plan approval before proceeding; at night nobody approves and they stall. You can switch to L0 direct release (staff publishes immediately), or keep waiting for your approval."
   },
   "onboard": {
@@ -875,7 +874,6 @@ export const enPlainCopy: WarCopy = {
   "preflight": {
     "hint": "Waits for your plan approval — stalls all night if nobody approves",
     "hintTalking": "The Planning Agent is waiting for your reply, and the proposal needs your approval — both steps before it proceeds; left unattended overnight it stalls",
-    "toDirect": "Switch to direct execution",
     "title": "Items marked L1/L2 wait for your plan approval before proceeding; at night nobody approves and they stall. You can switch to direct execution (the Planning Agent publishes immediately), or keep waiting for your approval."
   },
   "onboard": {

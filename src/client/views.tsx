@@ -474,22 +474,18 @@ function genPips(cards: BoardCommand[], tasksOf: (c: BoardCommand) => BoardTask[
   })))
 }
 
-function CommandCard(cmd: BoardCommand, hqSessionId: string | null, services: ClientServicesFace, onDetail: (cmd: BoardCommand) => void, chain: BoardTask[], trace: CardTrace, onRegrade: (grade: 'L0' | 'L1' | 'L2') => void, tour = false, pips: ReactNode = null, history = false): ReactNode {
+function CommandCard(cmd: BoardCommand, hqSessionId: string | null, services: ClientServicesFace, onDetail: (cmd: BoardCommand) => void, chain: BoardTask[], trace: CardTrace, tour = false, pips: ReactNode = null, history = false): ReactNode {
   const meta = commandStatus(cmd.status)
-  const enterSession = (): void => {
-    const target = cmd.staffSessionId ?? hqSessionId
-    if (target === null || services.sessions === undefined) return
-    void markTalking(cmd.commandId)
-    services.sessions.open(target)
-  }
+  // 板面收敛（舰长令「板面=读+下令入口，动作归聚焦页定夺点」）：R5 的「进入
+  // 对话」（markTalking=账面变更）与「改直发」（regrade=账面变更）退役——点卡
+  // 即进聚焦页，答澄清走决策带、改档走配置段；卡面只留 ◎ 聚焦（纯导航）。
   // V9.5（复评 P1-1）：命令卡点击语义统一——一律打开全生命周期详情（板是
-  // 叙事中心，好奇不该瞬移出板）；对话入口改列快捷操作行。
-  // V9.9 tour 变体（聚焦页内嵌）：点击=展开下达配置，◎/进入对话收起（底部
-  // 「任务会话」跳钮覆盖对话入口，窗口内不需要二次聚焦）。
-  const conversational = !tour && (cmd.status === 'received' || cmd.status === 'talking')
+  // 叙事中心，好奇不该瞬移出板）。
+  // V9.9 tour 变体（聚焦页内嵌）：点击=展开下达配置，◎ 收起（底部「任务会话」
+  // 跳钮覆盖对话入口，窗口内不需要二次聚焦）。
   // V10.1 五行卡规格（舰长定）：R1 徽章行 / R2 命令原文一行截断 / R3 生命条 /
-  // R4 通知行（预检提示·取消原因，空则留位）/ R5 快捷操作行（进入对话·改直
-  // 发·◎ 聚焦；全空给「无快捷操作」占位）——行高恒定，坞内所有命令卡同尺寸。
+  // R4 通知行（预检提示·取消原因，纯读）/ R5 快捷操作行（◎ 聚焦；全空给「无快
+  // 捷操作」占位）——行高恒定，坞内所有命令卡同尺寸。
   const preflight = stalledOnUserPlan(cmd)
   // 审计轮·批次3 修复：三元错接归位——cancelledNote 持显示串（取消原因），
   // ghostSpeaks 归位为布尔（tour 内成形 ghost 在场即由它发言）。此前布尔化的
@@ -561,20 +557,9 @@ function CommandCard(cmd: BoardCommand, hqSessionId: string | null, services: Cl
           cmd.status === 'talking' ? activeCopy().preflight.hintTalking : activeCopy().preflight.hint)
       : ghostSpeaks ? null : cancelledNote,
   ),
-  // R5 快捷操作行：进入对话 / 改直发（V7-④ 出口）/ ◎ 聚焦；tour 变体全空给占位；
+  // R5 快捷操作行：◎ 聚焦（纯导航）；tour 变体全空给占位；
   // history 变体（组展开面板里的历代卡）无此行——过去的命令不再需要操作，只可点看。
   history ? null : createElement('div', { className: 'war-card-actions' },
-    conversational
-      ? createElement('button', {
-          className: 'war-btn war-enter-btn',
-          type: 'button',
-          title: meta.hint,
-          onClick: e => { e.stopPropagation(); enterSession() },
-        }, activeCopy().focusPage.talkingEnterBtn)
-      : null,
-    preflight
-      ? createElement('button', { className: 'war-btn war-preflight-btn', onClick: e => { e.stopPropagation(); onRegrade('L0') } }, activeCopy().preflight.toDirect)
-      : null,
     !tour
       ? createElement('button', {
           className: 'war-btn war-focus-btn',
@@ -583,7 +568,7 @@ function CommandCard(cmd: BoardCommand, hqSessionId: string | null, services: Cl
           onClick: e => { e.stopPropagation(); trace.onFocus(cmd.commandId) },
         }, '◎')
       : null,
-    tour && !conversational && !preflight
+    tour
       ? createElement('span', { className: 'war-card-actions-empty' },
           // A3-P2：终局命令不走「自动推进」措辞（与安神带同源二态）。
           cmd.status === 'cancelled'
@@ -1399,7 +1384,7 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
         // （V9.10 配置即改档之家——看当时怎么配的，顺手改档）。
         createElement('section', { className: 'war-cd-stage', 'data-stage': 'command' },
           stageHead('command', cmd.grade !== null ? GRADE_LABEL[cmd.grade] : band.noGrade),
-          CommandCard(cmd, hqSessionId, services, () => { setOpen(o => o !== null && o.kind === 'config' ? null : { kind: 'config' }) }, chain, NO_TRACE, onRegrade, true),
+          CommandCard(cmd, hqSessionId, services, () => { setOpen(o => o !== null && o.kind === 'config' ? null : { kind: 'config' }) }, chain, NO_TRACE, true),
           open !== null && open.kind === 'config'
             ? createElement('div', { className: 'war-subdetail' },
               createElement('div', { className: 'war-subdetail-title' }, fp.configTitle),
@@ -2506,10 +2491,6 @@ export function warView(services: ClientServicesFace): () => ReactNode {
       setDetailSegment(segment)
       setDetailCommandId(commandId)
     }
-    const openStaff = (taskId: string): void => {
-      const target = staffFor(taskId)
-      if (target !== null) services.sessions?.open(target)
-    }
     // V9.9 点击接线梳理（舰长定案）：详情面只剩聚焦页——任务卡有溯源开聚焦页，
     // 孤儿任务（真实流程不会出现）直跳其末次会话，不再进旧任务详情。
     // （V13 上移：taskCardOf 在战线分组装配期即被调用，TDZ 不许声明滞后。）
@@ -2894,7 +2875,13 @@ export function warView(services: ClientServicesFace): () => ReactNode {
     // 聚合态，成形卡归组首），单代/孤儿保持原排序心智；组与扁平项按最近活动交错。
     const taskCardOf = (t: BoardTask): ReactNode => TaskCard(t, statuses, openTaskVia,
       (t.status === 'reported' || t.status === 'failed') && staffFor(t.taskId) !== null
-        ? () => { openStaff(t.taskId) }
+        ? () => {
+            // 板面收敛（舰长令）：处理钮落聚焦页定夺段（与收件箱同映射）——
+            // reported→report 段（去验收决策带）/ failed→chain 段（决重试），
+            // 会话直达降级为聚焦页底部跳钮。
+            const lc = lineageOf(t.taskId)
+            if (lc !== null) openCommand(lc.commandId, t.status === 'reported' ? 'report' : 'chain')
+          }
         : null,
       lineageOf(t.taskId), openCommand, traceFor(lineageOf(t.taskId)?.commandId ?? null),
       (() => { const f = taskFront.get(t.taskId); return f !== undefined ? bfNameOf(f.battlefield) : null })())
@@ -3226,9 +3213,7 @@ export function warView(services: ClientServicesFace): () => ReactNode {
                         ? { ...base, active: c.commandId }
                         : base
                     })()
-                return CommandCard(c, hqSessionId, services, cmd => openCommand(cmd.commandId), chainOf(c), trace, grade => {
-                  actNote(regradeCommand(c.commandId, grade), activeCopy().commandDetail.regradeTo(activeCopy().grade[grade]))
-                }, false, pips, history)
+                return CommandCard(c, hqSessionId, services, cmd => openCommand(cmd.commandId), chainOf(c), trace, false, pips, history)
               }
               return g.cards.length === 1
                 ? renderDockCard(g.cards[0]!)

@@ -425,7 +425,6 @@ body[data-ds-dark-theme] .war-root{
 .war-card-note.war-preflight{padding:0;border:none;border-radius:0;background:transparent}
 .war-card-note.is-fail{color:var(--war-fail)}
 .war-preflight-text{flex:1 1 auto;min-width:0;font-size:calc(12px*var(--war-fs));color:var(--war-wait);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.war-preflight-btn{padding:2px 8px;font-size:calc(12px*var(--war-fs));line-height:calc(18px*var(--war-fs));flex:0 0 auto}
 
 /* --- V7-⑥ 空板首用引导 -------------------------------------------------------- */
 .war-onboard{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px 20px;text-align:center}
@@ -670,9 +669,6 @@ body[data-ds-dark-theme] .war-root .war-alarm-time,body[data-ds-dark-theme] .war
 /* --- V9.3：批准计划视觉隔离（一键保留，后果先讲清——决策区独立成块）--------- */
 .war-modal:focus-visible{outline:none}
 /* --- V9.5：进入对话 chip（视觉独立于卡身——对话入口不再借整卡点击）+ kbd 提示 --- */
-.war-btn.war-enter-btn{cursor:pointer;color:var(--war-run-strong);border-color:color-mix(in srgb, var(--war-run-border) 45%, transparent);background:transparent;flex:0 0 auto}
-.war-btn.war-enter-btn:hover{background:var(--war-run-tint)}
-.war-btn.war-enter-btn:focus-visible{outline:2px solid var(--war-focus);outline-offset:2px}
 .war-cp-kbd{margin-top:8px;font-size:calc(12px*var(--war-fs));color:var(--war-text-2)}
 /* --- V9.6：列标题 h2 语义化复位 + 语义色 label 回退 primary（宿主未定义时不塌黑） --- */
 h2.war-col-title{margin:0;font-size:calc(13px*var(--war-fs))}

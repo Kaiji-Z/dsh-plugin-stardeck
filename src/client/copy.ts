@@ -220,7 +220,6 @@ export interface WarCopy {
     /** sd 回流（stardeck critique P2）：talking 态的真阻塞是「等你答问」——预检
      *  提示改说两步语义，不再与状态行「等你答问」打架。 */
     hintTalking: string
-    toDirect: string
     title: string
   }
   /** V7-⑥ 空板首用引导（无命令无任务时的第一屏）。 */
@@ -615,7 +614,6 @@ export const warCopy: WarCopy = {
   preflight: {
     hint: '将停在计划待批——夜间无人值守会停整晚',
     hintTalking: '答完参谋的问还要批计划——两步都过才会继续跑，夜里没人理会停整晚',
-    toDirect: '改直发',
     title: '升档 L1/L2 的命令要等你批准计划才会继续，夜里没人批就一直停着。可改为 L0 直发（参谋直接发布执行），或保持等你批。',
   },
   onboard: {
@@ -1122,7 +1120,6 @@ export const plainCopy: WarCopy = {
   preflight: {
     hint: '需要你批准方案后才会继续——夜里没人处理会一直停着',
     hintTalking: '规划 Agent 先等你的回话，方案也要你点头——两步都过才会继续，夜里没人理会停一晚',
-    toDirect: '改为直接执行',
     title: '标记为 L1/L2 的任务要等你批准方案才会继续，夜里没人处理就一直停着。可改为直接执行（规划 Agent 直接发布），或保持等你批。',
   },
   onboard: {

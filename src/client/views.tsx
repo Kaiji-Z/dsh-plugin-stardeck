@@ -1781,15 +1781,30 @@ function FrontHead(f: WarFront): ReactNode {
   )
 }
 
-function InboxStrip(items: InboxItem[], onAct: (item: InboxItem) => void, frontOf?: (it: InboxItem) => { key: string; label: string; hueSlot: number } | null): ReactNode {
+function InboxStrip(items: InboxItem[], onAct: (item: InboxItem) => void, frontOf?: (it: InboxItem) => { key: string; label: string; hueSlot: number } | null, batch?: {
+  /** 批量定夺（舰长令「逐条快览+批量批/驳」）：plan 行复选，选中即出批量栏；
+   *  写口仍是逐条 decidePlan（既有合法写），批=客户端顺序循环。 */
+  sel: ReadonlySet<string>
+  onToggleSel: (key: string) => void
+  onBatch: (decision: 'approve' | 'reject') => void
+  planTextOf: (commandId: string) => string | null
+}): ReactNode {
   const copy = activeCopy().inbox
   const kindLabel: Record<InboxKind, string> = { clarify: copy.clarify, plan: copy.plan, review: copy.review, retry: copy.retry }
   const leader = agingLeader(items)
+  const sel = batch?.sel ?? new Set<string>()
   return createElement('div', { className: 'war-inbox' },
     createElement('div', { className: 'war-inbox-head' },
       createElement('span', { className: 'war-inbox-title' }, copy.title),
       createElement('span', { className: 'war-inbox-count' }, String(items.length)),
     ),
+    batch !== null && batch !== undefined && sel.size > 0
+      ? createElement('div', { className: 'war-inbox-batch' },
+          createElement('button', { type: 'button', className: 'war-btn primary', onClick: () => { batch.onBatch('approve') } }, `${copy.batchApprove} (${sel.size})`),
+          createElement('button', { type: 'button', className: 'war-btn', onClick: () => { batch.onBatch('reject') } }, `${copy.batchReject} (${sel.size})`),
+          createElement('button', { type: 'button', className: 'war-btn', onClick: () => { batch.onToggleSel('__clear__') } }, copy.batchClear),
+        )
+      : null,
     items.length === 0
       ? createElement('div', { className: 'war-inbox-empty' }, copy.empty)
       : createElement('div', { className: 'war-inbox-items' },
@@ -1811,9 +1826,17 @@ function InboxStrip(items: InboxItem[], onAct: (item: InboxItem) => void, frontO
             onClick: () => { onAct(it) },
             onKeyDown: keyActivate(() => { onAct(it) }),
           },
+          it.kind === 'plan' && batch !== null && batch !== undefined
+            ? createElement('button', {
+                key: 'sel', type: 'button', role: 'checkbox', 'aria-checked': sel.has(key),
+                className: `war-inbox-sel${sel.has(key) ? ' on' : ''}`,
+                title: copy.batchSelTitle,
+                onClick: e => { e.stopPropagation(); batch.onToggleSel(key) },
+              }, sel.has(key) ? '☑' : '☐')
+            : null,
           createElement('span', { className: `war-chip k-${it.kind}` }, kindLabel[it.kind]),
           leader === key ? createElement('span', { className: 'war-inbox-oldest' }, copy.oldest) : null,
-          createElement('span', { className: 'war-inbox-text' }, it.title),
+          createElement('span', { className: 'war-inbox-text', title: it.kind === 'plan' ? batch?.planTextOf(it.refId) ?? undefined : undefined }, it.title),
           createElement('span', { className: 'war-inbox-wait' }, copy.waited(formatWait(it.waitMs))),
           )]
         }),
@@ -1868,8 +1891,15 @@ function WarIsland(props: {
   onInboxAct: (it: InboxItem) => void
   /** V13：收件项→多代战线归属（分组头展示；动作粒度不变）。 */
   inboxFrontOf?: (it: InboxItem) => { key: string; label: string; hueSlot: number } | null
+  /** 批量定夺（舰长令）：plan 行复选+批量栏；状态与写口在 WarView（decidePlan/refresh）。 */
+  inboxBatch?: {
+    sel: ReadonlySet<string>
+    onToggleSel: (key: string) => void
+    onBatch: (decision: 'approve' | 'reject') => void
+    planTextOf: (commandId: string) => string | null
+  }
 }): ReactNode {
-  const { active, hydrated, counts, inbox, visit, lastSeen, now, focusText, onExitFocus, onSettings, onInboxAct, inboxFrontOf } = props
+  const { active, hydrated, counts, inbox, visit, lastSeen, now, focusText, onExitFocus, onSettings, onInboxAct, inboxFrontOf, inboxBatch } = props
   const [hover, setHover] = useState(false)
   const [pinned, setPinned] = useState(false)
   const copy = activeCopy().island
@@ -1983,7 +2013,7 @@ function WarIsland(props: {
   open
     ? createElement('div', { className: 'war-island-panel' },
       VisitBanner(visit, lastSeen, now),
-      InboxStrip(inbox, onInboxAct, inboxFrontOf),
+      InboxStrip(inbox, onInboxAct, inboxFrontOf, inboxBatch),
     )
     : null,
   announce !== null
@@ -2312,6 +2342,8 @@ export function warView(services: ClientServicesFace): () => ReactNode {
     // V10 续接播种：任务回报卡「下续战令」→ 预填起草器接续目标。
     const [continueSeed, setContinueSeed] = useState<string | null>(null)
     // V10-R3a 星域/列表视图偏好（窄屏强制列表——中庭放不下恒星系）。
+    // 批量定夺选择集（收件箱 plan 行复选；键=`plan:${commandId}`）。
+    const [batchSel, setBatchSel] = useState<ReadonlySet<string>>(new Set())
     const [viewPref, setViewPref] = useState<'list' | 'map'>(() => {
       try { return localStorage.getItem('warroom-cfg-view') === 'map' ? 'map' : 'list' } catch { return 'list' }
     })
@@ -2992,6 +3024,33 @@ export function warView(services: ClientServicesFace): () => ReactNode {
         onExitFocus: () => { setFocusCommandId(null) },
         onSettings: () => { setSettingsOpen(true) },
         onInboxAct: inboxAct,
+        inboxBatch: {
+          sel: batchSel,
+          onToggleSel: key => {
+            setBatchSel(prev => {
+              if (key === '__clear__') return new Set()
+              const next = new Set(prev)
+              if (next.has(key)) next.delete(key)
+              else next.add(key)
+              return next
+            })
+          },
+          onBatch: decision => {
+            const ids = [...batchSel].filter(k => k.startsWith('plan:')).map(k => k.slice(5))
+            if (ids.length === 0) return
+            void (async () => {
+              let failed = 0
+              for (const id of ids) {
+                const r = await decidePlan(id, decision).catch(() => ({ ok: false }))
+                if (!r.ok) failed += 1
+              }
+              setBatchSel(new Set())
+              if (failed > 0) setActionError(activeCopy().inbox.batchFail(failed))
+              else { setActionError(null); refresh() }
+            })()
+          },
+          planTextOf: id => commandsNewest.find(c => c.commandId === id)?.plan?.text ?? null,
+        },
         inboxFrontOf: it => {
           const f = it.kind === 'clarify' || it.kind === 'plan'
             ? cmdFront.get(it.refId)

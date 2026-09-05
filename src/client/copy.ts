@@ -197,6 +197,12 @@ export interface WarCopy {
     errTitle: string
     /** err 档内最老一条的加粗徽标（V7.1 老化通胀整改：红里也要有先后）。 */
     oldest: string
+    /** 批量定夺（舰长令）：plan 行复选+批量栏（写口=逐条 decidePlan 既有合法写）。 */
+    batchApprove: string
+    batchReject: string
+    batchClear: string
+    batchSelTitle: string
+    batchFail: (n: number) => string
   }
   /** V7-② 到访摘要（自上次看过以来的增量横幅）。 */
   visit: {
@@ -597,6 +603,11 @@ export const warCopy: WarCopy = {
     waited: d => `等 ${d}`,
     warnTitle: '已等你超过半小时',
     errTitle: '已等你超过两小时——夜间命令会整晚停在这里',
+    batchApprove: '批准所选',
+    batchReject: '驳回所选',
+    batchClear: '取消选择',
+    batchSelTitle: '勾选后批量定夺（悬停看计划原文）',
+    batchFail: n => `${n} 条处理失败，其余已生效`,
     oldest: '等最久',
   },
   /** V7-② 到访摘要（自上次看过以来的增量横幅）。 */
@@ -1105,6 +1116,11 @@ export const plainCopy: WarCopy = {
     waited: d => `已等 ${d}`,
     warnTitle: '已等待超过半小时',
     errTitle: '已等待超过两小时——夜里没人处理会一直停着',
+    batchApprove: '批准所选',
+    batchReject: '驳回所选',
+    batchClear: '取消选择',
+    batchSelTitle: '勾选后批量处理（悬停看方案原文）',
+    batchFail: n => `${n} 条处理失败，其余已生效`,
     oldest: '等最久',
   },
   visit: {

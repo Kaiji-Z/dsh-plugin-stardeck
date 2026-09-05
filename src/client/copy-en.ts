@@ -157,6 +157,11 @@ export const enWarCopy: WarCopy = {
     "waited": d=>`waiting ${d}`,
     "warnTitle": "Waiting over half an hour",
     "errTitle": "Waiting over two hours — overnight commands will stall here all night",
+    "batchApprove": "Approve selected",
+    "batchReject": "Reject selected",
+    "batchClear": "Clear selection",
+    "batchSelTitle": "Check to batch-decide (hover for plan text)",
+    "batchFail": n => `${n} failed, the rest took effect`,
     "oldest": "longest wait"
   },
   "visit": {
@@ -856,6 +861,11 @@ export const enPlainCopy: WarCopy = {
     "waited": d=>`waited ${d}`,
     "warnTitle": "Waiting over half an hour",
     "errTitle": "Waiting over two hours — overnight items will stall until morning",
+    "batchApprove": "Approve selected",
+    "batchReject": "Reject selected",
+    "batchClear": "Clear selection",
+    "batchSelTitle": "Check to batch-process (hover for proposal text)",
+    "batchFail": n => `${n} failed, the rest took effect`,
     "oldest": "longest wait"
   },
   "visit": {

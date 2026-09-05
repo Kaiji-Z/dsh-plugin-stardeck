@@ -389,6 +389,10 @@ body[data-ds-dark-theme] .war-root{
 .war-inbox-title{font-size:calc(12px*var(--war-fs));font-weight:700;color:var(--war-text-2);letter-spacing:.04em}
 .war-inbox-count{font-size:calc(12px*var(--war-fs));line-height:calc(18px*var(--war-fs));min-width:18px;text-align:center;padding:0 6px;border-radius:9px;background:var(--war-well-bg);color:var(--war-text-2)}
 .war-inbox-items{display:flex;flex-direction:column;max-height:176px;overflow-y:auto}
+/* 批量定夺（舰长令）：plan 行复选 + 批量栏（写口=逐条 decidePlan）。 */
+.war-inbox-batch{display:flex;gap:6px;margin-top:8px}
+.war-inbox-sel{flex:none;width:22px;height:22px;line-height:20px;padding:0;text-align:center;border:1px solid var(--war-border);border-radius:var(--war-r-sm);background:transparent;color:var(--war-text-2);cursor:pointer;font-size:calc(14px*var(--war-fs))}
+.war-inbox-sel.on{border-color:var(--war-run-border);background:var(--war-run-tint);color:var(--war-run-strong)}
 .war-inbox-item{display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer;border-bottom:1px solid var(--war-border-soft);scroll-margin-top:36px}
 .war-inbox-item:last-child{border-bottom:0}
 .war-inbox-item:hover{background:var(--war-well-bg)}

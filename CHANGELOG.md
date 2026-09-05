@@ -17,6 +17,7 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 ## [Unreleased]
 
 ### Added
+- **收件箱批量定夺（批D，舰长令「逐条快览+批量批/驳」）**：岛收件箱面板的 plan 行新增复选框（悬停 title 快览计划原文全文），勾选即出批量栏「批准所选(N)/驳回所选(N)/取消选择」——写口仍是逐条 `decidePlan` 既有合法 API（客户端顺序循环，账本事件语义零改动，读投影红线不破）；部分失败给「N 条处理失败，其余已生效」提示，成功静默刷新（与 actNote 同口径）。状态与处理器在 WarView、经 `inboxBatch` props 透传 WarIsland→InboxStrip（组件无 hook 违例）。词典 inbox 增 5 键（batchApprove/batchReject/batchClear/batchSelTitle/batchFail，三皮肤+EN 键形锁过）。DOM 探针 scripts/probe-sd-batch.py 4/4：复选/批量栏/快览/恰好 2 条 plan approved 且零错误。
 - **大账本性能基线回归（批C）**：`scripts/seed-bulk.py`（在演示板之上追加 N 条批量命令，五档状态分布 55/15/10/10/10，events 与 seed-playground 同格式）+ `scripts/probe-perf.py`（board API 延迟体积/冷挂载/页签切换/聚焦页四项，追加写 `.goal/evidence/perf/baseline.md`）。500 命令（522 cmd/463 task）实测：API 197-210ms/727KB、冷挂载 2.8-3.6s、页签 141-226ms、聚焦 40-53ms（对照 ~20 命令 12ms/513ms/52ms/41ms）——线性无断崖，三个月量级可用，优化阈值与首刀方案记 baseline.md。
 
 ### Fixed

@@ -535,6 +535,7 @@ export const enWarCopy: WarCopy = {
     "battleDone": "Execution finished — no sessions in progress",
     "battleNone": "Not yet started — awaiting a Field Commander to claim the task",
     "reportVerdict": "Closing verdict",
+    "reportPreview": s=>`Report preview · ${s}`,
     "reportLatest": "Latest war report",
     "reportNone": "No report yet — the verdict appears here after closing",
     "reportLive": (verb,n,when)=>`Operation in progress \xB7 ${verb} \xB7 attempt ${n} \xB7 since ${when}`,
@@ -683,6 +684,11 @@ export const enWarCopy: WarCopy = {
     "countSegs": c=>[c.pending>0?{kind:"pending",label:`On it ${c.pending}`}:null,c.waiting>0?{kind:"waiting",label:`Squad ${c.waiting}`}:null,c.active>0?{kind:"active",label:`Executing ${c.active}`}:null,c.failed>0?{kind:"failed",label:`Defeats ${c.failed}`}:null].filter(x=>x!==null),
     "countsScope": "Counts cover all tabs (tabs only switch the three columns)",
     "inboxBadge": n=>`\u2709 ${n}`,
+    // V19.9 readability (1): badge kind suffix + hover full name.
+    "inboxKinds": c=>[c.review>0?`${c.review} read`:"",c.plan>0?`${c.plan} approve`:"",c.clarify>0?`${c.clarify} answer`:"",c.retry>0?`${c.retry} retry`:""].filter(x=>x!=="").join(" \xB7 "),
+    "inboxKindsTitle": c=>`Inbox ${c.clarify+c.plan+c.review+c.retry}: ${[c.review>0?`${c.review} to read`:"",c.plan>0?`${c.plan} to approve`:"",c.clarify>0?`${c.clarify} to answer`:"",c.retry>0?`${c.retry} to retry`:""].filter(x=>x!=="").join(" \xB7 ")}`,
+    // V19.9 readability (3): global activity pulse.
+    "pulse": t=>`last activity ${t}`,
     "visitMini": (closed,failed,commands)=>[closed>0?`\u2713settled ${closed}`:"",failed>0?`\u2715defeats ${failed}`:"",commands>0?`\u271Anew ${commands}`:""].filter(s=>s!=="").join(" \xB7 "),
     "pin": "Pin open (click again to fold)",
     "unpin": "Unpin",
@@ -1239,6 +1245,7 @@ export const enPlainCopy: WarCopy = {
     "battleDone": "Execution finished — no sessions in progress",
     "battleNone": "Not started yet — awaiting an execution agent to claim the task",
     "reportVerdict": "Final verdict",
+    "reportPreview": s=>`Quick look · ${s}`,
     "reportLatest": "Latest report",
     "reportNone": "No report yet — the verdict appears here after closing",
     "reportLive": (verb,n,when)=>`Running \xB7 ${verb} \xB7 attempt ${n} \xB7 since ${when}`,
@@ -1387,6 +1394,10 @@ export const enPlainCopy: WarCopy = {
     "countSegs": c=>[c.pending>0?{kind:"pending",label:`Planning ${c.pending}`}:null,c.waiting>0?{kind:"waiting",label:`Execution agent ${c.waiting}`}:null,c.active>0?{kind:"active",label:`Running ${c.active}`}:null,c.failed>0?{kind:"failed",label:`Failed ${c.failed}`}:null].filter(x=>x!==null),
     "countsScope": "Counts cover the whole board (tabs only switch the three columns)",
     "inboxBadge": n=>`\u2709 ${n}`,
+    // V19.9 readability (1), plain wording.
+    "inboxKinds": c=>[c.review>0?`${c.review} check`:"",c.plan>0?`${c.plan} approve`:"",c.clarify>0?`${c.clarify} answer`:"",c.retry>0?`${c.retry} retry`:""].filter(x=>x!=="").join(" \xB7 "),
+    "inboxKindsTitle": c=>`To-dos ${c.clarify+c.plan+c.review+c.retry}: ${[c.review>0?`${c.review} to check`:"",c.plan>0?`${c.plan} to approve`:"",c.clarify>0?`${c.clarify} to answer`:"",c.retry>0?`${c.retry} to retry`:""].filter(x=>x!=="").join(" \xB7 ")}`,
+    "pulse": t=>`last activity ${t}`,
     "visitMini": (closed,failed,commands)=>[closed>0?`\u2713done ${closed}`:"",failed>0?`\u2715failed ${failed}`:"",commands>0?`\uFF0Bnew ${commands}`:""].filter(s=>s!=="").join(" \xB7 "),
     "pin": "Pin open (click again to fold)",
     "unpin": "Unpin",

@@ -16,6 +16,9 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 
 ## [Unreleased]
 
+### Added
+- **V19.9 可读性三件（回流自 stardeck 0ec08ea）**：①岛 ✉ 徽标分性质——计数后缀内联四类标记（军事 阅/批/答/试、平话 看/批/答/试，trek 派生随词表），悬停给全称「收件箱 N 件：待翻阅任务回报 2 · …」——「等我什么」从开浮层降为零跳；②灵动岛全局活动脉搏——`.war-island-pulse` 播「最近动静 X 前」（全板最新时间戳=命令/任务/战报/尝试取 max 的 relTime，弱于计数的 text-3 灰），与到访摘要互补（那是「你不在时变了什么」，这是「离现在多近还有生命」）；③聚焦页任务回报段未展开态结论预览——`.war-report-preview` 显示战报首句 64 字+悬停全文，预览≠翻阅（markReportSeen 仍只在点开时落，V9.12 三通道不撤）。词典 island 增 3 键、focusPage 增 1 键（×4 皮肤含 EN）。DOM 探针 scripts/probe-sd-v199.py 4/4（徽标后缀+悬停全称/脉搏 relTime/预览 trek 派生词面/零 pageerror）。verify PASS。
+
 ### Changed
 - **V19.10 术语定案对齐 + 图例压缩（回流自 stardeck 5241694/4f0b428，2026-09-05 舰长定案）**：①HQ 三向分野落账——军事皮「司令部在线/返航→母舰」→「总部在线/返航→总部」、平话皮「总部亮着/返回→总部」→「HQ亮着/返回→HQ」、EN 军典 mothership→Headquarters（hqOn 保持 HQ 镜像 stardeck）；词表补 总部→星舰/军队→舰队/作战日志→舰桥日志 三条（zh+EN 同构；「作战日志」序前于「作战→执行」防派生「执行日志」，trekifyText 导出供机测锁序）。②执行者三向——军事皮 noBattle「等执行者领取」→「等指挥官领取」（stardeck 同款泄漏修平）、平话皮 4 处「执行者」→「执行 Agent」（ sqTag 干员/EN Operatives 保留，stardeck 定案后亦保留）；EN plain 全部 executor 字样（noBattle/waitingClaim/卡片题/岛计数/坞行等 14 处）手工换 execution agent——stardeck 的批量替换有误伤（"Execution agent Agent"）不照抄；EN 两皮 previewOpenFail 的 trek 词 "bridge log" 漏网修正（war→service log/plain→log，随词表 service log→bridge log）。③图例压缩三段并两段——砍「内环=最早/最老」「铭牌读数=兵数▸状态」两个自解释段（canvas 两行渲染实测正常）。取证：tests/skin.test.ts 新 V19.10 断言块（HQ 三向/执行者三向/词表序敏感/图例两段）+ copy-lang 键形锁；三皮整板+星域图例截图 .goal/evidence/audit-skins/ 肉眼复核通过。verify PASS。
 

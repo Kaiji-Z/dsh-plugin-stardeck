@@ -1521,7 +1521,12 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
                       }, activeCopy().chain.continueBtn)])
                     : null,
                 )
-                : null)
+                : lastReport !== undefined
+                  ? createElement('div', {
+                      className: 'war-report-preview',
+                      title: lastReport.r.text.split('\n').map(x => x.trim()).find(x => x !== '') ?? '',
+                    }, fp.reportPreview((lastReport.r.text.split('\n').map(x => x.trim()).find(x => x !== '') ?? '').slice(0, 64)))
+                  : null)
             : createElement('div', { className: 'war-tour-hint' },
               liveAttempts.length > 0
                 ? (() => { const la = liveAttempts[0]!.a; return fp.reportLive(activeCopy().execVerb(la.activity?.label ?? activeCopy().starfield.orbIdle), la.n, relTime(la.startedAt)) })()
@@ -1885,6 +1890,8 @@ function WarIsland(props: {
   visit: VisitDelta
   lastSeen: number
   now: number
+  /** V19.9 可读性③：全局活动脉搏（舰队的最近一次动静，relTime 文本；null=无数据）。 */
+  pulseAgo?: string | null
   focusText: string | null
   onExitFocus: () => void
   onSettings: () => void
@@ -1899,7 +1906,7 @@ function WarIsland(props: {
     planTextOf: (commandId: string) => string | null
   }
 }): ReactNode {
-  const { active, hydrated, counts, inbox, visit, lastSeen, now, focusText, onExitFocus, onSettings, onInboxAct, inboxFrontOf, inboxBatch } = props
+  const { active, hydrated, counts, inbox, visit, lastSeen, now, focusText, onExitFocus, onSettings, onInboxAct, inboxFrontOf, inboxBatch, pulseAgo } = props
   const [hover, setHover] = useState(false)
   const [pinned, setPinned] = useState(false)
   const copy = activeCopy().island
@@ -1978,9 +1985,16 @@ function WarIsland(props: {
       ? createElement('button', {
           type: 'button',
           className: `war-island-badge${inbox.some(i => i.tone === 'err') ? ' hot' : ' wait'}`,
-          title: activeCopy().inbox.title,
+          // V19.9 可读性①：徽标分性质——计数后缀四类标记（阅/批/答/试），
+          // 悬停给全称；「等我什么」从开浮层降为零跳。
+          title: copy.inboxKindsTitle({ clarify: inbox.filter(i => i.kind === 'clarify').length, plan: inbox.filter(i => i.kind === 'plan').length, review: inbox.filter(i => i.kind === 'review').length, retry: inbox.filter(i => i.kind === 'retry').length }),
           onClick: e => { e.stopPropagation(); setPinned(true) },
-        }, copy.inboxBadge(inbox.length))
+        }, `${copy.inboxBadge(inbox.length)} ${copy.inboxKinds({ clarify: inbox.filter(i => i.kind === 'clarify').length, plan: inbox.filter(i => i.kind === 'plan').length, review: inbox.filter(i => i.kind === 'review').length, retry: inbox.filter(i => i.kind === 'retry').length })}`.trim())
+      : null,
+    // V19.9 可读性③：全局活动脉搏——舰队最近一次动静（与到访摘要互补：那是
+    //「你不在时变了什么」，这是「离现在多近还有生命」）。
+    pulseAgo !== null && pulseAgo !== undefined && pulseAgo !== ''
+      ? createElement('span', { className: 'war-island-pulse', title: copy.pulse(pulseAgo) }, copy.pulse(pulseAgo))
       : null,
     visit.any
       ? createElement('span', {
@@ -3020,6 +3034,17 @@ export function warView(services: ClientServicesFace): () => ReactNode {
         visit,
         lastSeen: lastSeenSnapshot,
         now,
+        // V19.9 可读性③：脉搏=全板最新时间戳（命令/任务/战报/尝试取 max）的 relTime。
+        pulseAgo: (() => {
+          if (data === null || data === undefined) return null
+          let latest = 0
+          for (const c of data.commands) { const t = Date.parse(c.createdAt); if (Number.isFinite(t) && t > latest) latest = t }
+          for (const t of data.tasks) {
+            const ts = [Date.parse(t.startedAt), ...t.reports.map(r => Date.parse(r.ts)), ...(t.attemptLog ?? []).flatMap(a => [Date.parse(a.startedAt), a.endedAt === null ? 0 : Date.parse(a.endedAt)])]
+            for (const x of ts) if (Number.isFinite(x) && x > latest) latest = x
+          }
+          return latest > 0 ? relTime(new Date(latest).toISOString(), now) : null
+        })(),
         focusText: focusCommandId !== null && focusCmd !== undefined ? focusCmd.text : null,
         onExitFocus: () => { setFocusCommandId(null) },
         onSettings: () => { setSettingsOpen(true) },

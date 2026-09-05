@@ -249,6 +249,8 @@ body[data-ds-dark-theme] .war-root{
 .war-island-badge.hot{color:var(--war-fail);border-color:var(--war-fail-border);font-weight:600}
 .war-island-badge.wait{color:var(--war-wait);border-color:var(--war-wait-border)} /* V16.4 P2-1：琥珀=等你搬到徽标（等外勤小队是机器等待，四数全中性） */
 .war-island-visitmini{font-size:calc(12px*var(--war-fs));color:var(--war-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.war-island-pulse{font-size:calc(12px*var(--war-fs));color:var(--war-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0} /* V19.9 可读性③：全局活动脉搏（弱于计数，存而不抢） */
+.war-report-preview{font-size:calc(12px*var(--war-fs));color:var(--war-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:2px 0 1px} /* V19.9 可读性④：待翻阅态结论预览（点开才=翻阅） */
 .war-vm-seg.done{color:var(--war-done)} /* V16.4-R7：delta 语义染色 */
 .war-vm-seg.fail{color:var(--war-fail)}
 .war-vm-seg.run{color:var(--war-run-strong)}

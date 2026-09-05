@@ -361,6 +361,8 @@ export interface WarCopy {
     battleDone: string
     battleNone: string
     reportVerdict: string
+    /** V19.9 可读性④：待翻阅态结论预览（战报首句不点开即可瞄到；预览≠翻阅）。 */
+    reportPreview: (s: string) => string
     reportLatest: string
     reportNone: string
     /** V10.1 critique P1-1：战报段在途回退——不再是死区灰条。 */
@@ -458,6 +460,11 @@ export interface WarCopy {
     /** V18 critique：岛计数=全页签口径（切片只作用于三列）。 */
     countsScope: string
     inboxBadge: (n: number) => string
+    /** V19.9 可读性①：徽标分性质——四类计数内联后缀 + 悬停全称（零跳知「等我什么」）。 */
+    inboxKinds: (c: { clarify: number; plan: number; review: number; retry: number }) => string
+    inboxKindsTitle: (c: { clarify: number; plan: number; review: number; retry: number }) => string
+    /** V19.9 可读性③：全局活动脉搏（relTime 文本——舰队最近一次动静）。 */
+    pulse: (t: string) => string
     visitMini: (closed: number, failed: number, commands: number) => string
     pin: string
     unpin: string
@@ -863,6 +870,7 @@ export const warCopy: WarCopy = {
     battleDone: '已执行完成——没有正在进行的会话',
     battleNone: '尚未开始执行——等指挥官领取任务',
     reportVerdict: '收官结论',
+    reportPreview: s => `战报预览 · ${s}`,
     reportLatest: '最新战报',
     reportNone: '尚无战报——收官后这里给结论原文',
     reportLive: (verb, n, when) => `作战进行中 · ${verb} · 第 ${n} 次作战 · 始于${when}`,
@@ -971,6 +979,11 @@ export const warCopy: WarCopy = {
       ].filter(x => x !== null),
     countsScope: '计数为全页签口径（页签只切三列）',
     inboxBadge: n => `✉ ${n}`,
+    // V19.9 可读性①：徽标分性质——四类计数内联后缀 + 悬停全称（零跳知「等我什么」）。
+    inboxKinds: c => [c.review > 0 ? `阅${c.review}` : '', c.plan > 0 ? `批${c.plan}` : '', c.clarify > 0 ? `答${c.clarify}` : '', c.retry > 0 ? `试${c.retry}` : ''].filter(s => s !== '').join('·'),
+    inboxKindsTitle: c => `收件箱 ${c.clarify + c.plan + c.review + c.retry} 件：${[c.review > 0 ? `待翻阅战报 ${c.review}` : '', c.plan > 0 ? `待批计划 ${c.plan}` : '', c.clarify > 0 ? `待答问 ${c.clarify}` : '', c.retry > 0 ? `待重试 ${c.retry}` : ''].filter(s => s !== '').join(' · ')}`,
+    // V19.9 可读性③：全局活动脉搏（relTime 文本——舰队最近一次动静）。
+    pulse: t => `最近动静 ${t}`,
     // V10.1 审查：▲收官→✓收官（善终语义，与凯旋印记同符）。
     visitMini: (closed, failed, commands) =>
       [closed > 0 ? `✓收官 ${closed}` : '', failed > 0 ? `✕折戟 ${failed}` : '', commands > 0 ? `✚新令 ${commands}` : '']
@@ -1375,6 +1388,7 @@ export const plainCopy: WarCopy = {
     battleDone: '已执行完成——没有正在进行的会话',
     battleNone: '还没开始执行——等执行 Agent 领取任务',
     reportVerdict: '最终结论',
+    reportPreview: s => `先看一眼 · ${s}`,
     reportLatest: '最新汇报',
     reportNone: '还没有汇报——收官后这里给结论原文',
     reportLive: (verb, n, when) => `进行中 · ${verb} · 第 ${n} 次 · 从${when}开始`,
@@ -1477,6 +1491,10 @@ export const plainCopy: WarCopy = {
       ].filter(x => x !== null),
     countsScope: '计数为全看板口径（页签只切三列）',
     inboxBadge: n => `✉ ${n}`,
+    // V19.9 可读性①（平话词面）。
+    inboxKinds: c => [c.review > 0 ? `看${c.review}` : '', c.plan > 0 ? `批${c.plan}` : '', c.clarify > 0 ? `答${c.clarify}` : '', c.retry > 0 ? `试${c.retry}` : ''].filter(s => s !== '').join('·'),
+    inboxKindsTitle: c => `待办 ${c.clarify + c.plan + c.review + c.retry} 件：${[c.review > 0 ? `待过目结果 ${c.review}` : '', c.plan > 0 ? `待批准计划 ${c.plan}` : '', c.clarify > 0 ? `待回答提问 ${c.clarify}` : '', c.retry > 0 ? `待重试 ${c.retry}` : ''].filter(s => s !== '').join(' · ')}`,
+    pulse: t => `最近活动 ${t}`,
     visitMini: (closed, failed, commands) =>
       [closed > 0 ? `✓完成 ${closed}` : '', failed > 0 ? `✕失败 ${failed}` : '', commands > 0 ? `＋新命令 ${commands}` : '']
         .filter(s => s !== '').join(' · '),

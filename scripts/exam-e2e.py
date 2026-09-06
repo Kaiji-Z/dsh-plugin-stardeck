@@ -23,11 +23,19 @@ stages:
 考题工作区 C:/Users/kaiji/vibecodingKJ/temp/e2e-exam-ws（脚本外先删旧）。
 证据落 .goal/evidence/e2e/。SSE 长连接在，一律 domcontentloaded。
 """
-import sys, io, time, json, os, shutil
+import sys, io, time, json, os, shutil, re
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 from playwright.sync_api import sync_playwright
 
 BASE = 'http://127.0.0.1:3080'
+
+def _token():
+    """新宿主带 token 鉴权——起服日志抓 `?token=`（含 -_ 字符）。"""
+    try:
+        m = re.search(r'token=[a-zA-Z0-9_-]+', open(r'C:/Users/kaiji/.dsh/warroom-plugin/server.log', encoding='utf-8', errors='ignore').read())
+        return m.group(0) if m else ''
+    except Exception:
+        return ''
 EV = '.goal/evidence/e2e'
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WS = 'C:/Users/kaiji/vibecodingKJ/temp/e2e-exam-ws'
@@ -69,7 +77,7 @@ def find_cmd(b, tag):
 
 
 def open_board(pg):
-    pg.goto(BASE, wait_until='domcontentloaded')
+    pg.goto(BASE + ('?' + _token() if _token() else ''), wait_until='domcontentloaded')
     pg.wait_for_selector('[data-dsh-warroom-entry]', timeout=20000)
     pg.wait_for_timeout(1500)
     pg.click('[data-dsh-warroom-entry]')

@@ -724,11 +724,11 @@ export function apply(ctx: Context, config: Config): void {
   // next-turn 收件箱，重启重放——语义优于旧 RPC 的 queue）；rename = sessionTitle
   // 服务（可选面，缺席降级 ok——纯装饰性标题）。prompt 走 liveAgent：get 未命中先
   // resume 冷续（对齐旧 RPC 的 turnAgentFor 自动转活语义）。
-  ctx.inject(['agents', 'workspaceRegistry'], (boundCtx) => {
+  ctx.inject(['agents', 'workspaceRegistry', 'agentDefaultModel'], (boundCtx) => {
     const faces = boundCtx as unknown as {
       agents: {
-        create(options: { sessionId: string; meta?: { cwd?: string } }): Promise<unknown>
-        resume(options: { resumeSessionId: string }): Promise<unknown>
+        create(options: { sessionId: string; meta?: { cwd?: string; agentPreset?: string }; agentOptions?: { provider: string; model: string }; setup?: (agentCtx: unknown) => Promise<void> }): Promise<unknown>
+        resume(options: { resumeSessionId: string; agentOptions?: { provider: string; model: string }; setup?: (agentCtx: unknown) => Promise<void> }): Promise<unknown>
         get(id: string): { id: string; session?: unknown; followup(message: unknown): void } | undefined
         list(): Array<{ id: string }>
       }
@@ -738,13 +738,37 @@ export function apply(ctx: Context, config: Config): void {
         archiveSession(sessionId: string): Promise<void>
         list(): Array<{ id: unknown; path: string; title: string; sessionIds: ReadonlyArray<string> }>
       }
+      agentDefaultModel: {
+        currentSelection(): { provider: string; model: string }
+      }
+    }
+    /** e2e 实弹抓出的缺口：不带模型的 agent 首回合即死于 prompt 变量 {{model}} 无值——
+     * rc.2 旧径经 ApiProxyDefaults.defaultModelSelection 注入同源选择。 */
+    const agentOptions = (): { provider: string; model: string } => {
+      try { return faces.agentDefaultModel.currentSelection() } catch { return { provider: '', model: '' } }
+    }
+    /** e2e 实弹第二抓：不带 preset 装配的 agent 只有全局插件工具（study/warroom），
+     * 无 write/bash 核心工具集——rc.2 旧径经 composeAgent(presets.mount) 装配。
+     * presets 面缺席时诚实降级为裸组合（与 rc.2 同款兜底）。 */
+    const composeAgent = async (): Promise<{ agentPreset?: string; setup: (agentCtx: unknown) => Promise<void> }> => {
+      const presets = (boundCtx as unknown as { get(name: string): { resolve(id?: string): Promise<{ id: string }>; mount(agentCtx: unknown, id?: string): Promise<unknown> } | undefined }).get('agentPresets')
+      if (presets === undefined) return { setup: async () => {} }
+      try {
+        const resolved = await presets.resolve(undefined)
+        return {
+          agentPreset: resolved.id,
+          setup: async (agentCtx: unknown) => { await presets.mount(agentCtx, resolved.id) },
+        }
+      } catch {
+        return { setup: async () => {} }
+      }
     }
     const ok = <T,>(value: T): { result: { ok: true; value: T } } => ({ result: { ok: true, value } })
     const fail = (code: string, message: string): { result: { ok: false; error: { code: string; message: string } } } => ({ result: { ok: false, error: { code, message } } })
     const liveAgent = async (sessionId: string) => {
       const live = faces.agents.get(sessionId)
       if (live !== undefined) return live
-      try { await faces.agents.resume({ resumeSessionId: sessionId }) } catch { /* 冷续失败如实回落 not-found */ }
+      try { const composition = await composeAgent(); await faces.agents.resume({ resumeSessionId: sessionId, agentOptions: agentOptions(), setup: composition.setup }) } catch { /* 冷续失败如实回落 not-found */ }
       return faces.agents.get(sessionId)
     }
     const sessions: SessionsApiFace = {
@@ -756,11 +780,13 @@ export function apply(ctx: Context, config: Config): void {
             const ws = faces.workspaceRegistry.get(request.payload.workspaceId)
             if (ws === undefined) return fail('workspace-not-found', `workspace "${request.payload.workspaceId}" not found`)
             cwd = ws.path
-            await faces.agents.create({ sessionId, meta: { cwd } })
+            const composition = await composeAgent()
+            await faces.agents.create({ sessionId, meta: { cwd, ...(composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset }) }, agentOptions: agentOptions(), setup: composition.setup })
             await ws.attachSession(sessionId)
           } else {
             if (request.payload.cwd !== undefined) cwd = request.payload.cwd
-            await faces.agents.create({ sessionId, meta: { cwd } })
+            const composition = await composeAgent()
+            await faces.agents.create({ sessionId, meta: { cwd, ...(composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset }) }, agentOptions: agentOptions(), setup: composition.setup })
           }
           return ok({ sessionId })
         } catch (err) {

@@ -2352,16 +2352,9 @@ function SettingsDrawer(props: {
           langBtn('zh', copy.langZh),
           langBtn('en', copy.langEn)),
         createElement('div', { className: 'war-settings-note' }, copy.langHint),
-        createElement('div', { className: 'war-settings-section' }, copy.legendSection),
-        createElement('div', { className: 'war-legend-rows' },
-          activeCopy().legend.rows.flatMap(row => {
-            const [sym, text] = row
-            const cls = row.length > 2 ? row[2]! : ''
-            return [
-              createElement('span', { key: `${sym}-sym`, className: cls !== '' ? `war-legend-sym war-legend-dot ${cls}` : 'war-legend-sym' }, sym),
-              createElement('span', { key: `${sym}-text`, className: 'war-legend-text' }, text),
-            ]
-          })),
+        // V19.11 回流（stardeck 4c6f017）：设置内图例退役（舰长判多余成立）——
+        // 13 行全部与就地解释重复（◎/↩/！/？ 悬停、状态 chip 自带文字、色环归
+        // 地图图例、!!/??与档位归起草器教学）；图例面=重复广播病灶，砍。
         createElement('div', { className: 'war-settings-section' }, copy.viewSection),
         toggle(copy.viewMap, copy.viewMapHint, viewMap, onToggleViewMap),
         narrowActive ? createElement('div', { className: 'war-settings-note' }, copy.narrowNote) : null,

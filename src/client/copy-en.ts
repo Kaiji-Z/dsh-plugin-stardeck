@@ -85,7 +85,6 @@ export const enWarCopy: WarCopy = {
     "fontSection": "Font size",
     "fontReset": "Reset",
     "fontHint": "Text only (85%-135%): columns and cards keep their layout; text reflows inside its box.",
-    "legendSection": "Legend (symbol reference)",
     "behaviorSection": "Board behavior",
     "hoverFamily": "Hover lineage highlight",
     "hoverFamilyHint": "Hover any card: cards of the same command light up, the rest dim",
@@ -202,80 +201,6 @@ export const enWarCopy: WarCopy = {
   "actions": {
     "failToast": what=>`${what} didn't take \u2014 the server didn't accept it (state may have changed); refresh and retry shortly`,
     "jumpMissHint": "Session did not jump — it is not in the host directory; open it once from the workspace session list, then jump"
-  },
-  "legend": {
-    "btn": "ⓘ Legend",
-    "title": "Board legend — symbols and marks",
-    "rows": [
-      [
-        "●",
-        "Status, four tiers: blue = machines working",
-        "dot-run"
-      ],
-      [
-        "●",
-        "amber = awaiting you",
-        "dot-wait"
-      ],
-      [
-        "●",
-        "green = well-ended (settled/read)",
-        "dot-done"
-      ],
-      [
-        "●",
-        "red = defeat (final failure/fuse blown)",
-        "dot-fail"
-      ],
-      [
-        "◌",
-        "Campaign ring: one ring per battlefield; segments = number of campaigns on it (cross-battlefield continuation starts a new campaign)"
-      ],
-      [
-        "！",
-        "New bounty posted, awaiting a Field Commander"
-      ],
-      [
-        "？",
-        "War report submitted — awaiting your review"
-      ],
-      [
-        "◎",
-        "Focus: light up only this command's lineage (tasks + sessions), Esc to exit"
-      ],
-      [
-        "↩",
-        "Traceability chip: click to jump back to the source command's full lifecycle"
-      ],
-      [
-        "⌁",
-        "Session-id prefix (Field Commander / externally mounted sessions)"
-      ],
-      [
-        "Breathing outline",
-        "Command being received by staff (~15 s), no action needed"
-      ],
-      [
-        "!! / ??",
-        "Command prefix markers: !! do it now (L0) · ?? plan first (L2)"
-      ],
-      [
-        "L0/L1/L2",
-        "Autonomy grades: direct / plan-approval / clarify"
-      ],
-      [
-        "Four-segment bar",
-        "Command→Task→Operation→Report lifecycle progress"
-      ],
-      [
-        "Quality, five tiers",
-        "Bounty complexity tiers (chip color varies)"
-      ],
-      [
-        "Yellow/Red wait",
-        "Inbox waits over 30 min turn yellow, over 2 h turn red; \"longest wait\" bolded"
-      ]
-    ]
   },
   "colActions": {
     "attachLabel": "⌁ Mount",
@@ -803,7 +728,6 @@ export const enPlainCopy: WarCopy = {
     "fontSection": "Font size",
     "fontReset": "Reset",
     "fontHint": "Text only (85%-135%): columns and cards keep their layout; text reflows inside its box.",
-    "legendSection": "Legend (symbol reference)",
     "behaviorSection": "Board behavior",
     "hoverFamily": "Hover to see related",
     "hoverFamilyHint": "Hovering a card lights up cards of the same command and dims the rest",
@@ -920,80 +844,6 @@ export const enPlainCopy: WarCopy = {
   "actions": {
     "failToast": what=>`${what} didn't take \u2014 the server declined it (state may have changed); refresh and retry shortly`,
     "jumpMissHint": "Session did not jump — it is not in the host directory; open it once from the workspace session list, then jump"
-  },
-  "legend": {
-    "btn": "ⓘ Legend",
-    "title": "Board legend — symbols and marks",
-    "rows": [
-      [
-        "●",
-        "Status, four tiers: blue = machines working",
-        "dot-run"
-      ],
-      [
-        "●",
-        "amber = awaiting you",
-        "dot-wait"
-      ],
-      [
-        "●",
-        "green = done (read)",
-        "dot-done"
-      ],
-      [
-        "●",
-        "red = failed (final/fuse blown)",
-        "dot-fail"
-      ],
-      [
-        "◌",
-        "Ring: multiple rounds of the same project (dot = round number); one color = one line; continuing in another project starts a new line"
-      ],
-      [
-        "！",
-        "New task, awaiting an execution agent"
-      ],
-      [
-        "？",
-        "Result submitted, awaiting your review"
-      ],
-      [
-        "◎",
-        "Only this: highlight related tasks and sessions, dim the rest, Esc to exit"
-      ],
-      [
-        "↩",
-        "Source chip: click to jump back to the source command's details"
-      ],
-      [
-        "⌁",
-        "Session-id prefix (execution agent / externally mounted sessions)"
-      ],
-      [
-        "Breathing outline",
-        "New command being received by the Planning Agent (~15 s), no action needed"
-      ],
-      [
-        "!! / ??",
-        "Command prefix markers: !! do it now (L0) · ?? plan first (L2)"
-      ],
-      [
-        "L0/L1/L2",
-        "Autonomy grades: direct / plan-approval / clarify"
-      ],
-      [
-        "Four-segment bar",
-        "Issue→Task→Run→Result progress"
-      ],
-      [
-        "Quality, five tiers",
-        "Task complexity tiers (chip color varies)"
-      ],
-      [
-        "Yellow/Red wait",
-        "Pending over 30 min turns yellow, over 2 h turns red; \"longest wait\" bolded"
-      ]
-    ]
   },
   "colActions": {
     "attachLabel": "⌁ Mount",

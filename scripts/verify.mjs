@@ -137,7 +137,6 @@ gate('bundle', () => {
     [client, 'agingLeader', 'inbox err-tier leader marker (aging inflation fix)'],
     [client, 'failToast', 'decision-action failure toast copy (silent-failure fix)'],
     [client, 'war-actionerr', 'decision-action failure strip'],
-    [client, 'war-legend-rows', 'legend rows (now inside settings drawer)'],
     [client, 'war-subdetail', 'focus tour: inline sub-detail panel beneath clicked card'],
     [client, 'focus-visible', 'keyboard focus outline'],
     [client, 'keyActivate', 'card keyboard activation (Enter/Space)'],
@@ -485,6 +484,9 @@ gate('bundle', () => {
     // V20+回流 stardeck V19.6续：卡面只留导航——去验收/去下重试令处理钮全撤
     // （点卡即达聚焦页对应段，会话直达归聚焦页跳钮）；负断言防复活。
     { ok: !client.includes('去验收 · 参谋会话') && !client.includes('去下重试令 · 参谋会话'), label: 'V20: card handle buttons stay retired (click-through owns navigation)' },
+    // V19.11 回流（stardeck 4c6f017）：设置内图例退役——13 行全与就地解释重复
+    //（◎/↩/！/？ 悬停、状态 chip 自带文字、色环归地图图例、!!/??与档位归起草器）。
+    { ok: !client.includes('war-legend-rows') && !client.includes('图例（符号对照）'), label: 'V19.11: settings legend stays retired (in-place explanations own it)' },
     (() => {
       const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
       const decl = pkg.dsh?.client ?? {}

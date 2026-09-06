@@ -7,6 +7,15 @@
    点 reported/failed 任务卡本体 → 落聚焦页（report/chain 段在场）。
 """
 import asyncio, sys
+
+import re as _re
+def _token():
+    try:
+        m = _re.search(r'token=[a-zA-Z0-9_-]+', open(r'C:/Users/kaiji/.dsh/warroom-plugin/server.log', encoding='utf-8', errors='ignore').read())
+        return m.group(0) if m else ''
+    except Exception:
+        return ''
+
 from playwright.async_api import async_playwright
 
 BASE = 'http://127.0.0.1:3080'
@@ -20,7 +29,7 @@ async def main():
     async with async_playwright() as pw:
         browser = await pw.chromium.launch()
         pg = await browser.new_page(viewport={'width': 1600, 'height': 900})
-        await pg.goto(BASE, wait_until='domcontentloaded')
+        await pg.goto(BASE + ('?' + _token() if _token() else ''), wait_until='domcontentloaded')
         await pg.wait_for_selector('[data-dsh-warroom-entry]', timeout=20000)
         await pg.evaluate("() => { localStorage.setItem('warroom-cfg-view', 'list'); localStorage.setItem('warroom-cfg-zoom', '1') }")
         await pg.reload(wait_until='domcontentloaded')

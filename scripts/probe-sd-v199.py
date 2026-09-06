@@ -4,6 +4,15 @@
 # ③ 聚焦页任务回报段未展开态结论预览（.war-report-preview，预览≠翻阅）
 from playwright.sync_api import sync_playwright
 
+import re as _re
+def _token():
+    try:
+        m = _re.search(r'token=[a-zA-Z0-9_-]+', open(r'C:/Users/kaiji/.dsh/warroom-plugin/server.log', encoding='utf-8', errors='ignore').read())
+        return m.group(0) if m else ''
+    except Exception:
+        return ''
+
+
 BASE = 'http://127.0.0.1:3080/'
 results = []
 
@@ -12,7 +21,7 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={'width': 1680, 'height': 950})
     errors = []
     pg.on('pageerror', lambda e: errors.append(str(e)))
-    pg.goto(BASE, wait_until='domcontentloaded')
+    pg.goto(BASE + ('?' + _token() if _token() else ''), wait_until='domcontentloaded')
     pg.wait_for_timeout(2000)
     if pg.locator('[data-dsh-warroom-entry]').count():
         pg.locator('[data-dsh-warroom-entry]').click()

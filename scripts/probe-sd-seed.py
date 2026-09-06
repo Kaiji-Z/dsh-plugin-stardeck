@@ -1,6 +1,15 @@
 # 探针·V19.7 播种钮（回流）：聚焦页打回重做 → 起草器预填（文本+续接钉线，不自动提交）
 from playwright.sync_api import sync_playwright
 
+import re as _re
+def _token():
+    try:
+        m = _re.search(r'token=[a-zA-Z0-9_-]+', open(r'C:/Users/kaiji/.dsh/warroom-plugin/server.log', encoding='utf-8', errors='ignore').read())
+        return m.group(0) if m else ''
+    except Exception:
+        return ''
+
+
 BASE = 'http://127.0.0.1:3080/'
 results = []
 
@@ -9,7 +18,7 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={'width': 1680, 'height': 950})
     errors = []
     pg.on('pageerror', lambda e: errors.append(str(e)))
-    pg.goto(BASE, wait_until='domcontentloaded')
+    pg.goto(BASE + ('?' + _token() if _token() else ''), wait_until='domcontentloaded')
     pg.wait_for_timeout(4000)
     # 板可能自开（shell 水合延迟不定）——入口点击会切换开/关，故只在确实没开时点一次，
     # 然后一律等卡片就绪（30s 上限）。

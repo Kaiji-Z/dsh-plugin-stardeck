@@ -703,20 +703,116 @@ export function apply(ctx: Context, config: Config): void {
   // Cordis effect = setup-returns-cleanup (React shape): a single-arrow
   // disposer executes IMMEDIATELY and kills its own fuse (live R8 catch).
   ctx.effect(() => () => commandFuse.stop(), 'warroom.commandFuse()')
-  // The apiProxy sessions face binds LATE (see the fuse comment above) — the
-  // v5 spike probe needs it too, so capture it in a ref the probe closure reads.
-  ctx.inject(['apiProxy'], (apiCtx) => {
-    const api = (apiCtx as unknown as { apiProxy: { sessions: SessionsApiFace; workspace: WorkspaceApiFace } }).apiProxy
-    console.log('[warroom] apiProxy bound to fuse + patrol + conscriptor')
-    commander.bindRelay(api.sessions, api.workspace)
-    commandFuse.bind(api.sessions, api.workspace)
-    sessionsRef.face = api.sessions
-    workspaceRef.face = api.workspace
+  // 宿主 master 适配（2026-09-06）：apiProxy 包已被宿主删除（4f00a8b82a），正典面
+  // = agents + workspaceRegistry 底层服务。此处包一层 rpcId 信封适配器，七个调用点
+  // （conscriptor/relay/fuse/wake/quota/archive/weave）继续吃 SessionsApiFace/
+  // WorkspaceApiFace 不变——迁移面收敛在本地一处。映射考古自 rc.2 的 api-proxy.ts：
+  // sessions.create = agents.create(meta.cwd) + 可选 workspace.attachSession（自铸
+  // session-<uuid> 号，与旧 RPC 同款）；prompt(queue) = agent.followup（durable
+  // next-turn 收件箱，重启重放——语义优于旧 RPC 的 queue）；rename = sessionTitle
+  // 服务（可选面，缺席降级 ok——纯装饰性标题）。prompt 走 liveAgent：get 未命中先
+  // resume 冷续（对齐旧 RPC 的 turnAgentFor 自动转活语义）。
+  ctx.inject(['agents', 'workspaceRegistry'], (boundCtx) => {
+    const faces = boundCtx as unknown as {
+      agents: {
+        create(options: { sessionId: string; meta?: { cwd?: string } }): Promise<unknown>
+        resume(options: { resumeSessionId: string }): Promise<unknown>
+        get(id: string): { id: string; session?: unknown; followup(message: unknown): void } | undefined
+        list(): Array<{ id: string }>
+      }
+      workspaceRegistry: {
+        create(path: string): Promise<{ id: unknown; path: string; attachSession(sessionId: string): Promise<void> }>
+        get(id: unknown): { id: unknown; path: string; attachSession(sessionId: string): Promise<void> } | undefined
+        archiveSession(sessionId: string): Promise<void>
+        list(): Array<{ id: unknown; path: string; title: string; sessionIds: ReadonlyArray<string> }>
+      }
+    }
+    const ok = <T,>(value: T): { result: { ok: true; value: T } } => ({ result: { ok: true, value } })
+    const fail = (code: string, message: string): { result: { ok: false; error: { code: string; message: string } } } => ({ result: { ok: false, error: { code, message } } })
+    const liveAgent = async (sessionId: string) => {
+      const live = faces.agents.get(sessionId)
+      if (live !== undefined) return live
+      try { await faces.agents.resume({ resumeSessionId: sessionId }) } catch { /* 冷续失败如实回落 not-found */ }
+      return faces.agents.get(sessionId)
+    }
+    const sessions: SessionsApiFace = {
+      async create(request) {
+        try {
+          const sessionId = `session-${crypto.randomUUID()}`
+          let cwd = process.cwd()
+          if (request.payload.workspaceId !== undefined) {
+            const ws = faces.workspaceRegistry.get(request.payload.workspaceId)
+            if (ws === undefined) return fail('workspace-not-found', `workspace "${request.payload.workspaceId}" not found`)
+            cwd = ws.path
+            await faces.agents.create({ sessionId, meta: { cwd } })
+            await ws.attachSession(sessionId)
+          } else {
+            if (request.payload.cwd !== undefined) cwd = request.payload.cwd
+            await faces.agents.create({ sessionId, meta: { cwd } })
+          }
+          return ok({ sessionId })
+        } catch (err) {
+          return fail('session-create-failed', `failed to create session: ${String(err)}`)
+        }
+      },
+      async rename(request) {
+        try {
+          const titles = (boundCtx as unknown as { get(name: string): { rename(session: unknown, title: string): unknown } | undefined }).get('sessionTitle')
+          const agent = await liveAgent(request.payload.sessionId)
+          if (titles !== undefined && agent !== undefined && agent.session !== undefined) titles.rename(agent.session, request.payload.title)
+          return ok({ renamed: true })
+        } catch (err) {
+          return fail('rename-failed', String(err))
+        }
+      },
+      async prompt(request) {
+        try {
+          const agent = await liveAgent(request.payload.sessionId)
+          if (agent === undefined) return fail('session-not-found', `session "${request.payload.sessionId}" has no live or resumable agent`)
+          agent.followup({ id: crypto.randomUUID(), role: 'user', content: request.payload.content, source: { kind: 'user' } })
+          return ok({ accepted: true })
+        } catch (err) {
+          return fail('prompt-failed', String(err))
+        }
+      },
+      // V17 归档核查用（只吃 id）；标题面在 agents registry 不存在——织换的标题
+      // 匹配会退回每次新建（诚实降级，见 weave 侧注释）。
+      async list() {
+        return ok({ items: faces.agents.list().map(a => ({ id: a.id, displayTitle: '' })) })
+      },
+    }
+    const workspace: WorkspaceApiFace & Partial<WorkspaceListFace> = {
+      async create(request) {
+        try {
+          const ws = await faces.workspaceRegistry.create(request.payload.path)
+          return ok({ workspace: { workspaceId: String(ws.id) } })
+        } catch (err) {
+          return fail('workspace-create-failed', String(err))
+        }
+      },
+      async archiveSession(request) {
+        try {
+          await faces.workspaceRegistry.archiveSession(request.payload.sessionId)
+          return ok({ archived: true })
+        } catch (err) {
+          return fail('archive-failed', String(err))
+        }
+      },
+      // V18 HQ 注册弹窗（只读）：registry 全量（含 title/sessionIds）。
+      async list() {
+        return ok({ items: faces.workspaceRegistry.list().map(ws => ({ workspaceId: String(ws.id), path: ws.path, title: ws.title, sessionIds: [...ws.sessionIds] })) })
+      },
+    }
+    console.log('[warroom] session faces bound (agents+workspaceRegistry — master 正典面适配)')
+    commander.bindRelay(sessions, workspace)
+    commandFuse.bind(sessions, workspace)
+    sessionsRef.face = sessions
+    workspaceRef.face = workspace
     // V9.11 演示织换（config.demoWeave，smoke overlay 专用）：faces 就绪即把种子
     // 假会话号换成宿主真会话（建在当前工作区——web 跳转只认当前工作区会话表）。
     // best-effort，失败只记日志绝不进事件循环。
     if (config.demoWeave) {
-      void weaveDemoSessions(stateDir, { sessions: api.sessions, currentRoot: process.cwd() }).catch(err => {
+      void weaveDemoSessions(stateDir, { sessions, currentRoot: process.cwd() }).catch(err => {
         console.log(`[warroom] demo weave skipped: ${String(err)}`)
       })
     }

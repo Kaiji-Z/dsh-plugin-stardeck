@@ -48,12 +48,14 @@ with sync_playwright() as p:
     # ③ 聚焦页战报预览：点调度条上含「待舰长翻阅/待舰长翻阅」生命条的已接收卡，
     # 或直接找战报列有 reported 的命令卡——用调度条第一张可点卡逐个试。
     opened = False
-    for i in range(12):
+    # 窗口 20：活跃新令会沉到调度条前部，reported 旧令位置随板增长后移。
+    for i in range(20):
         cards = pg.locator('.war-dispatch .war-card')
         if i >= cards.count():
             break
         try:
-            cards.nth(i).click(timeout=5000)
+            # 全板每秒重渲染（island relTime）下 locator click 恒超时——DOM 直点。
+            pg.evaluate(f"() => {{ const c = document.querySelectorAll('.war-dispatch .war-card')[{i}]; if (c) c.click() }}")
         except Exception:
             continue
         pg.wait_for_timeout(700)
@@ -66,7 +68,8 @@ with sync_playwright() as p:
                 results.append(('战报结论预览（未展开态）', ok3, f'text={t[:36]!r} title_len={len(tt)}'))
                 opened = True
                 break
-        pg.keyboard.press('Escape')
+        if pg.locator('.war-modal').count():
+            pg.keyboard.press('Escape')
         pg.wait_for_timeout(400)
     if not opened:
         results.append(('战报结论预览（未展开态）', False, 'no focus page with report preview found in first cards'))

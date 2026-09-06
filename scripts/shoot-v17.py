@@ -6,6 +6,7 @@ Usage: python scripts/shoot-v17.py [outDir] [baseUrl]
 只读导航 + 一次归档写（走 /warroom/api/archive，SPEC 锁定动作）。
 """
 import json
+import re
 import sys
 import urllib.request
 from pathlib import Path
@@ -22,8 +23,16 @@ BASE = sys.argv[2] if len(sys.argv) > 2 else "http://127.0.0.1:3080"
 errors: list[str] = []
 
 
+def _token() -> str:
+    """新宿主带 token 鉴权：起服日志 `?token=...`（字符集含 -_，别用 \\w 截断）。"""
+    log = Path.home() / ".dsh" / "warroom-plugin" / "server.log"
+    m = re.search(r"[?&]token=([a-zA-Z0-9_-]+)", log.read_text(encoding="utf-8", errors="ignore"))
+    return m.group(1) if m else ""
+
+
 def api(path: str):
-    with urllib.request.urlopen(f"{BASE}{path}", timeout=300) as r:
+    sep = "&" if "?" in path else "?"
+    with urllib.request.urlopen(f"{BASE}{path}{sep}token={_token()}", timeout=300) as r:
         return json.loads(r.read())
 
 
@@ -40,7 +49,7 @@ with sync_playwright() as p:
     page.on("response", lambda r: net_log.append(f"RESP {r.status} {r.url.split('3080')[-1]}") if "/api/archive" in r.url else None)
 
     def open_board():
-        page.goto(BASE)
+        page.goto(f"{BASE}/?token={_token()}")
         page.wait_for_load_state("domcontentloaded")
         page.evaluate("() => document.body.removeAttribute('data-ds-dark-theme')")
         page.wait_for_timeout(400)
@@ -485,7 +494,7 @@ with sync_playwright() as p:
             import urllib.request as _u
             try:
                 t0 = _t.time()
-                with _u.urlopen(f"{BASE}/warroom/api/host-sessions", timeout=300) as r:
+                with _u.urlopen(f"{BASE}/warroom/api/host-sessions?token={_token()}", timeout=300) as r:
                     r.read()
                 if True:
                     return

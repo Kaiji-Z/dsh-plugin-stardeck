@@ -532,6 +532,33 @@ export function apply(ctx: Context, config: Config): void {
   const workspaceRef: { face?: WorkspaceApiFace } = {}
   // V17 归档 RPC 号序数（并行扇出下 Date.now() 毫秒会撞号——响应按 rpcId 关联）。
   let archiveSeq = 0
+  // 件C 冷清单缓存：sessionQuery 全量头帧扫描在本机 1872 会话上暖态 ~3.5s
+  // （冷盘更久），<2s 判据靠「起服预热填缓存 + 短 TTL + 写路失效」关闭。
+  // 失效点=本适配器 create/archiveSession（板侧归档核查的正确性依赖：归档后
+  // 下一读必实扫）；宿主侧自建会话（不经本适配器）最多滞后 TTL。epoch 守卫：
+  // 失效时刻在途的旧扫描不得回填缓存（归档后旧清单反杀）。
+  const COLD_LIST_TTL_MS = 30_000
+  const coldIds: {
+    items: Array<{ id: string; displayTitle: string }>
+    at: number
+    inflight: Promise<Array<{ id: string; displayTitle: string }>> | null
+    epoch: number
+  } = { items: [], at: 0, inflight: null, epoch: 0 }
+  const invalidateColdIds = () => { coldIds.at = 0; coldIds.epoch += 1; coldIds.inflight = null }
+  const readColdIds = (query: SessionQueryListFace): Promise<Array<{ id: string; displayTitle: string }>> => {
+    if (Date.now() - coldIds.at < COLD_LIST_TTL_MS) return Promise.resolve(coldIds.items)
+    if (coldIds.inflight !== null) return coldIds.inflight
+    const epoch = coldIds.epoch
+    coldIds.inflight = query.listSessions().then(records => {
+      const items = records.map(r => ({ id: String(r.header.id), displayTitle: '' }))
+      if (epoch === coldIds.epoch) {
+        coldIds.items = items
+        coldIds.at = Date.now()
+      }
+      return items
+    }).finally(() => { if (epoch === coldIds.epoch) coldIds.inflight = null })
+    return coldIds.inflight
+  }
   // V4-R3 (troop-scheduler): the 30s fallback fuse — mutation kicks cover the
   // common path; this sweep catches troops that idled without completing.
   // (the host's idle edges are not exposed to our structural slice; the
@@ -788,6 +815,9 @@ export function apply(ctx: Context, config: Config): void {
             const composition = await composeAgent()
             await faces.agents.create({ sessionId, meta: { cwd, ...(composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset }) }, agentOptions: agentOptions(), setup: composition.setup })
           }
+          // 件C：新建会话不失效冷清单缓存（30s TTL 覆盖可见性——host-sessions 的
+          // 消费面只有归档核查与织换复用，都无即时可见需求；开机织换连建 ~19 个
+          // 会话若逐一失效会把缓存打成实扫风暴，实测首响 6.5s）。归档失效保留。
           return ok({ sessionId })
         } catch (err) {
           return fail('session-create-failed', `failed to create session: ${String(err)}`)
@@ -813,9 +843,23 @@ export function apply(ctx: Context, config: Config): void {
           return fail('prompt-failed', String(err))
         }
       },
-      // V17 归档核查用（只吃 id）；标题面在 agents registry 不存在——织换的标题
-      // 匹配会退回每次新建（诚实降级，见 weave 侧注释）。
+      // 件C 冷清正典：sessionQuery.listSessions（宿主 session-controller list
+      // 同源——持久层头帧扫描 + live 覆盖，不激活 agent）。修 M1 LIVE-only 回归：
+      // 冷会话重新可见，V17 归档核查「归档后消失」才有牙。取 existence 语义不过
+      // 滤 cwd（宿主侧栏的 cwd 过滤是展示语义；多列不漏列，归档核查只会更严）。
+      // master 的 archiveSession 只把 id 记进 registry 的 archivedSessionIds
+      // （日志保留在盘上）——语料扫描天然含归档会话，须按 registry 归档集扣除
+      // （宿主侧栏同款语义，内存态读取零成本）。标题面仍无（displayTitle 空串）
+      // ——织换标题匹配维持诚实降级（tier-1 真号映射才是可靠通道）。面缺席/
+      // 扫描失败回落 LIVE-only（M1 形态，不假装冷清单）。
       async list() {
+        const query = (boundCtx as unknown as { get(name: string): SessionQueryListFace | undefined }).get('sessionQuery')
+        if (query !== undefined) {
+          try {
+            const archived = new Set([...((faces.workspaceRegistry as unknown as { archivedSessionIds?: Iterable<unknown> }).archivedSessionIds ?? [])].map(String))
+            return ok({ items: (await readColdIds(query)).filter(i => !archived.has(i.id)) })
+          } catch { /* 持久层扫描失败——回落 LIVE-only，不假装冷清单 */ }
+        }
         return ok({ items: faces.agents.list().map(a => ({ id: a.id, displayTitle: '' })) })
       },
     }
@@ -831,6 +875,8 @@ export function apply(ctx: Context, config: Config): void {
       async archiveSession(request) {
         try {
           await faces.workspaceRegistry.archiveSession(request.payload.sessionId)
+          // 件C：归档即失效冷清单缓存（V17 归档核查的「归档后消失」必读实扫）。
+          invalidateColdIds()
           return ok({ archived: true })
         } catch (err) {
           return fail('archive-failed', String(err))
@@ -854,6 +900,20 @@ export function apply(ctx: Context, config: Config): void {
         console.log(`[warroom] demo weave skipped: ${String(err)}`)
       })
     }
+  })
+  // 件C 预热：冷清头帧扫描在冷盘上可达秒级（本机 1872 会话）——起服后台先扫
+  // 一轮让 OS 页缓存吸掉首扫成本，host-sessions 首次响应才守得住 <2s 判据。
+  // 结果弃置：宿主无内存缓存（每次调用都实扫），预热只肥页缓存不养数据。
+  // 服务缺席则此块永不触发，安静跳过。
+  // 件C 预热：起服后台扫一轮填进冷清单缓存——首次 host-sessions 请求即为
+  // 缓存命中（<2s 判据的地基）。服务缺席则此块永不触发，安静跳过。
+  ctx.inject(['sessionQuery'], (warmCtx) => {
+    const query = (warmCtx as unknown as { get(name: string): SessionQueryListFace | undefined }).get('sessionQuery')
+    if (query === undefined) return
+    void readColdIds(query).then(
+      items => console.log(`[warroom] cold session list warmed: ${items.length} sessions`),
+      err => console.log(`[warroom] cold session list warmup failed: ${String(err)}`),
+    )
   })
   // The staff's drafting craft rides the runtime skill registry (no
   // filesystem writes — the runtime provider owns it, base bundles without
@@ -1001,6 +1061,12 @@ interface WorkspaceListFace {
       value: { items: ReadonlyArray<{ workspaceId: string; path: string; title: string; sessionIds: readonly string[] }> }
     } | { ok: false; error: { code: string; message: string } }
   }>
+}
+
+/** 件C 宿主 sessionQuery 服务的结构切片（listSessions = 持久层头帧扫描 +
+ * live 覆盖；与宿主 session-controller ApiSessionList.list 同一正典面）。 */
+interface SessionQueryListFace {
+  listSessions(signal?: AbortSignal): Promise<ReadonlyArray<{ header: { id: unknown; cwd?: string }; live: boolean }>>
 }
 
 /** V17 归档扇出加界：宿主 registry 操作队拥塞时 RPC 可排队分钟级——超时即败，

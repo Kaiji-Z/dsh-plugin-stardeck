@@ -14,7 +14,7 @@
 import { createElement, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
-import { archiveCommand, closeTask, createCommand, decidePlan, detachThread, markTalking, regradeCommand, useWar, type BoardAttempt, type BoardCommand, type BoardQuality, type BoardTask, type BoardThread, type FrontChoice } from './data.ts'
+import { answerCommand, archiveCommand, closeTask, createCommand, decidePlan, detachThread, markTalking, regradeCommand, useWar, type BoardAttempt, type BoardCommand, type BoardQuality, type BoardTask, type BoardThread, type FrontChoice } from './data.ts'
 import { activeCopy, langId, setLang, setSkin, skinId, subscribeLang, subscribeSkin, type LangId, type SkinId } from './copy.ts'
 import { agingLeader, collectInbox, formatWait, inboxGrowthAnnounce, type InboxItem, type InboxKind } from './inbox.ts'
 import { visitDelta, type VisitDelta } from './visit.ts'
@@ -1242,6 +1242,10 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
       return createElement('div', { key, className: 'war-subdetail' },
         createElement('div', { className: 'war-subdetail-title' }, fp.talkingGhostTitle),
         createElement('div', { className: 'war-sub-value' }, fp.talkingGhostNote),
+        // 件B 板上直接作答：行内答复替代「跳会话自己说」（进入对话钮保留——
+        // 长对话/贴图仍走宿主原生会话）。批计划不在此通道（plan ghost 的
+        // 批准/驳回走 decidePlan 账本路径，两定夺点并存不双重投递）。
+        createElement(TalkingAnswer, { commandId: cmd.commandId }),
         staffTarget !== null
           ? subActions([createElement('button', {
               className: 'war-btn primary war-btn-warn',
@@ -1578,8 +1582,51 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
 
 // --- 成形卡（V9.11 任务列=大副侧台账：任务书挂出前的占位形态，变体同聚焦页 ghost）---
 
-function FormingCard(cmd: BoardCommand, variant: 'plan' | 'talking' | 'drafting', onOpen: () => void, trace: CardTrace): ReactNode {
-  const lc = activeCopy().lifecycle
+/** 件B 板上直接作答（talking ghost 行内）：答复文本 → /commands/answer →
+ *  大副会话持久队列续跑——「跳会话自己说」的板内替身。独立组件持自有 state
+ *  （hooks 稳定——createElement 挂载纪律）；送达即清空，后续追问可连发。 */
+function TalkingAnswer({ commandId }: { commandId: string }): ReactNode {
+  const fp = activeCopy().focusPage
+  const [text, setText] = useState('')
+  const [phase, setPhase] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [error, setError] = useState('')
+  const submit = async () => {
+    const trimmed = text.trim()
+    if (trimmed === '' || phase === 'sending') return
+    setPhase('sending')
+    const r = await answerCommand(commandId, trimmed)
+    if (r.ok) {
+      setPhase('sent')
+      setText('')
+    } else {
+      setPhase('error')
+      setError(r.error ?? '')
+    }
+  }
+  return createElement('div', { className: 'war-talking-answer' },
+    createElement('textarea', {
+      className: 'war-answer-input',
+      value: text,
+      rows: 3,
+      placeholder: fp.talkingAnswerPlaceholder,
+      'aria-label': fp.talkingAnswerLabel,
+      onChange: e => { setText((e.target as HTMLTextAreaElement).value); if (phase === 'error') setPhase('idle') },
+      onKeyDown: e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); void submit() } },
+    }),
+    createElement('div', { className: 'war-answer-row' },
+      createElement('button', {
+        type: 'button',
+        className: 'war-btn primary war-btn-warn',
+        disabled: phase === 'sending' || text.trim() === '',
+        onClick: () => { void submit() },
+      }, phase === 'sending' ? fp.talkingAnswerSending : fp.talkingAnswerBtn),
+      phase === 'sent' ? createElement('span', { className: 'war-answer-note ok' }, fp.talkingAnswerSent) : null,
+      phase === 'error' ? createElement('span', { className: 'war-answer-note err' }, error) : null,
+    ),
+  )
+}
+
+function FormingCard(cmd: BoardCommand, variant: 'plan' | 'talking' | 'drafting', onOpen: () => void, trace: CardTrace): ReactNode {  const lc = activeCopy().lifecycle
   const fp = activeCopy().focusPage
   const planPending = cmd.plan?.status === 'pending'
   const chip = variant === 'talking' ? lc.waitingClarify

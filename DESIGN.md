@@ -926,3 +926,13 @@ map 态竖干不再贯通任务卡位：下行段到任务卡**入端口**（右
 ## 批E 冷恢复桥·参谋侧接线（2026-09-05，守护态加固）
 
 **挂账兑现口径**：V10 R2 spike 定案「冷会话 prompt=agents.resume 官方续接通道」，原挂账「deepen 会话级接线」中，执行侧（in_progress 死会话 rescue）B1-件⑤已接线、relay 草稿重试+queue 持久重放本就自愈；唯一真空=**参谋侧搁浅**——relay 只重试 draft，宿主重启时正分诊到一半的 received/talking 命令没人 resume 大副会话，永久搁浅。本批接线：patrolNow 增参谋侧 rescue（resolveAgent 判死→resumeAgent 续命+staffRescueNudgeFor 续行提示入队，持久队列自动重放舰长已入队的答问；连败 ≥2 记拒因留置——命令未成形任务无回栏语义；plan 待批不催=在等舰长定夺非搁浅；面缺席降级只记不动作）。deepen 复用父参谋会话的「会话级续接」仍按 V10 v1 定案走战线档案保上下文（每命令一会话征召制不破）。机测 +3（搁浅 resume+提示入队/plan 待批豁免/活体与 draft 豁免）。
+
+## M2-件B 板上直接作答（2026-09-06，goal 交付）
+
+**调研结论（userQuestions 为何不是送达通道）**：宿主 `ctx.userQuestions.ask()` 是**提问侧**——ask_user_question 工具的工具调用中阻塞，答题侧是 Agent-scoped waterfall（宿主 web UI 是答题者，先到先得）。插件若注册答题者会与宿主 UI 抢 claim（用户开着会话时双答题面打架）；且本插件的大副会话流程不依赖 ask 工具（e2e 两代链无 ask 卡；宿主系统提示词允许调，但无 UI 答题者时 NO_PROVIDER 报错自愈，大副退回散文提问——正是 talking 态的来源）。**正解=持久 followup 收件箱**（K17 pushToStaff 同通道、M1 适配器已实证）：板上作答投 `agent.followup`（wakeup=true）即续跑。ask 工具若未来真被大副调用，板上另呈决策卡属后续增量（waterfall 双答题面问题需宿主侧配合，非插件单边可解）。
+
+**实现**：①服务端 `POST /warroom/api/commands/answer {commandId, text}`——闸序：面缺席 501→缺参/超长(2000) 400→未知 404→终态 400→无大副会话 409→（received 态先落 directive_talking，复用既有事件零新增语义）→投递（30s 界，回执如实）；送达后状态推进**不代答不代推**——靠大副自身的下一枚 directive 事件（plan_opened/approved…）。②客户端 `answerCommand` + 聚焦页 talking ghost 行内 `TalkingAnswer` 组件（独立组件持自有 state——createElement 挂载纪律；Ctrl+Enter；送达即清空可连发；回执行 ok=绿 err=红）。③rpcId `warroom-answer-*` 带 warroom- 前缀=亲自信号自滤（M1-件② userSeen 不误报「你亲自入会」）。
+
+**边界**：批计划不走此通道（plan ghost 的批准/驳回=decidePlan 账本路径，两定夺点并存不双重投递）；prompts.ts 零改动（作答=用户亲言原文投递，无包装模板——快照门不涉）；「进入对话回答」钮保留（长对话/贴图仍走宿主原生会话）。
+
+**验证**：机测 answer 路由四组（面缺席/参数/翻 talking 落账不重复/终态 409 502）；probe-sd-b 双相——P1 种子板 DOM（talking ghost 展开→行内作答→「已送达大副会话」回执，trek 词面派生正确，真实投递织换真会话）；P2 实弹（`??` 命令→大副分诊 L2 后按指示停等 plan 空→板 API 作答→talking→plan 流转=答案真实驱动 war_plan）。探针坑：板面开合判据用 `.war-dispatch` 零尺寸而非 count（关板时节点仍在）；ghost 面板默认收起须先点 `.war-tour-ghost`；默认皮肤 trek——词面断言须认词典派生（参谋→大副）。

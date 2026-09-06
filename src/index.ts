@@ -992,6 +992,18 @@ export function apply(ctx: Context, config: Config): void {
         if (sessions === undefined) return
         void sessions.prompt({ rpcId: `warroom-plan-notice-${Date.now()}`, payload: { sessionId, mode: 'queue', content: [{ type: 'text', text }] } }).catch(() => undefined)
       },
+      // 件B 板上直接作答：同 queue 通道但带送达回执（30s 界——host RPC 拥塞时
+      // 如实败给路由记账，不无限挂起）。rpcId warroom- 前缀自滤亲自信号。
+      answerStaff: async (sessionId, text) => {
+        const sessions = sessionsRef.face
+        if (sessions === undefined) return { ok: false, message: '宿主会话通道未接入' }
+        try {
+          const r = await withTimeout(sessions.prompt({ rpcId: `warroom-answer-${Date.now()}`, payload: { sessionId, mode: 'queue', content: [{ type: 'text', text }] } }), 30_000)
+          return r.result.ok ? { ok: true } : { ok: false, message: r.result.error.message }
+        } catch {
+          return { ok: false, message: '送达超时（宿主会话通道拥塞）' }
+        }
+      },
       // V9.11 R2 执行卡实时活动：session/event → 动词滚动表（只读；盐随动词
       // 变化进 revision，SSE 仍只发 rev）。
       activity: activityTracker,

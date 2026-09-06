@@ -681,6 +681,17 @@ body[data-ds-dark-theme] .war-root .war-alarm-time,body[data-ds-dark-theme] .war
 h2.war-col-title{margin:0;font-size:calc(13px*var(--war-fs))}
 
 /* == WAR_CSS 追加锚点：新 CSS 插在本行之后 == */
+/* --- 件B 板上直接作答（talking ghost 行内答复）--------------------------------
+ * 与起草器同源的输入质感（well 底/同字号纪律），但住在聚焦页任务段 ghost 里：
+ * 窄容器不展开模板行，只给 输入+动作行 两件。note 两态走语义色（ok=绿善终回执，
+ * err=红败因——都够 4.5:1 的文本对比）。 */
+.war-talking-answer{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.war-answer-input{width:100%;min-height:64px;resize:vertical;font-family:var(--war-font);font-size:calc(13px*var(--war-fs));color:var(--war-text-1);background:var(--war-well-bg);border:1px solid var(--war-border);border-radius:var(--war-r-md);padding:8px 10px;outline:none}
+.war-answer-input:focus{border-color:var(--war-run-border)}
+.war-answer-row{display:flex;align-items:center;gap:10px}
+.war-answer-note{font-size:calc(12px*var(--war-fs))}
+.war-answer-note.ok{color:var(--war-done)}
+.war-answer-note.err{color:var(--war-fail)}
 /* --- V10 战线链色与身份 -------------------------------------------------------
  * 链是隐形语义的可见显影：8 个低饱和槽位、双主题各自成章（浅=压黑保白底对比，
  * 深=原值微亮）；strength/mixto 两枚主题变量让组件规则免写裸色值。槽位本体是

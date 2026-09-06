@@ -344,6 +344,12 @@ export interface WarCopy {
     talkingGhostCard: string
     talkingGhostNote: string
     talkingEnterBtn: string
+    /** 件B 板上直接作答（talking ghost 行内答复 → 大副会话续跑）。 */
+    talkingAnswerLabel: string
+    talkingAnswerPlaceholder: string
+    talkingAnswerBtn: string
+    talkingAnswerSending: string
+    talkingAnswerSent: string
     /** V9.10 任务卡展开补全：该环任务书+验收标准。 */
     taskBrief: string
     taskAcceptance: string
@@ -862,6 +868,11 @@ export const warCopy: WarCopy = {
     talkingGhostCard: '参谋在等你回答——点开进对话',
     talkingGhostNote: '任务卡在等你的回答成形——进对话答一句，参谋就能继续。',
     talkingEnterBtn: '进入对话回答',
+    talkingAnswerLabel: '板上直接作答',
+    talkingAnswerPlaceholder: '直接在这里回答参谋的问题（Ctrl+Enter 送达）',
+    talkingAnswerBtn: '送达参谋',
+    talkingAnswerSending: '送达中…',
+    talkingAnswerSent: '已送达参谋会话，参谋继续处理',
     taskBrief: '任务书',
     taskAcceptance: '验收标准',
     briefMissing: '（参谋未附任务书正文）',
@@ -1383,6 +1394,11 @@ export const plainCopy: WarCopy = {
     talkingGhostCard: '规划 Agent 在等你回答——点开进对话',
     talkingGhostNote: '任务卡要等你的回答才能成形——进对话说一句，规划 Agent 就能继续。',
     talkingEnterBtn: '进入对话回答',
+    talkingAnswerLabel: '板上直接作答',
+    talkingAnswerPlaceholder: '直接在这里回答规划 Agent 的问题（Ctrl+Enter 送达）',
+    talkingAnswerBtn: '送达规划 Agent',
+    talkingAnswerSending: '送达中…',
+    talkingAnswerSent: '已送达，规划 Agent 继续处理',
     taskBrief: '任务说明',
     taskAcceptance: '验收标准',
     briefMissing: '（规划 Agent 没附任务说明）',

@@ -215,6 +215,101 @@ test('件④: host-sessions 面缺席 501 / 提供时透出清单', async () => 
   }
 })
 
+/** seed：命令到 received（带大副会话）；talking=true 再落 directive_talking。 */
+function seedTalkingCommand(dir: string, cmdId: string, talking: boolean): void {
+  appendDirectiveEvent(dir, { type: 'directive_created', ts: 't0', directiveId: cmdId, text: 'x' })
+  appendDirectiveEvent(dir, { type: 'directive_session_opened', ts: 't1', directiveId: cmdId, staffSessionId: `staff-${cmdId}` })
+  appendDirectiveEvent(dir, { type: 'directive_received', ts: 't2', directiveId: cmdId, staffSessionId: `staff-${cmdId}` })
+  if (talking) appendDirectiveEvent(dir, { type: 'directive_talking', ts: 't3', directiveId: cmdId })
+}
+
+test('件B: answer 面缺席 → 501；缺参/超长 → 400；未知命令 → 404', async () => {
+  const dir = tmpStateDir()
+  const bare = makeHandler({ stateDir: dir })
+  try {
+    const r0 = await call(bare.handler, postReq('/warroom/api/commands/answer', { commandId: 'c', text: 't' }))
+    assert.equal(r0.body.ok, false)
+    assert.match(r0.body.error, /未接入/)
+  } finally {
+    bare.dispose()
+  }
+  const wired = makeHandler({ stateDir: dir, answerStaff: async () => ({ ok: true }) })
+  try {
+    const r1 = await call(wired.handler, postReq('/warroom/api/commands/answer', { commandId: '', text: 't' }))
+    assert.equal(r1.body.ok, false)
+    assert.match(r1.body.error, /缺少/)
+    const r2 = await call(wired.handler, postReq('/warroom/api/commands/answer', { commandId: 'nope', text: 't' }))
+    assert.equal(r2.body.ok, false)
+    assert.match(r2.body.error, /不存在/)
+    const r3 = await call(wired.handler, postReq('/warroom/api/commands/answer', { commandId: 'c', text: 'x'.repeat(2001) }))
+    assert.equal(r3.body.ok, false)
+    assert.match(r3.body.error, /2000/)
+  } finally {
+    wired.dispose()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('件B: answer received 态作答 → 翻 talking + 送达原文；talking 态不重复落账', async () => {
+  const dir = tmpStateDir()
+  try {
+    seedTalkingCommand(dir, 'cmd-a', false)
+    const delivered: Array<{ sessionId: string; text: string }> = []
+    const wired = makeHandler({
+      stateDir: dir,
+      answerStaff: async (sessionId: string, text: string) => { delivered.push({ sessionId, text }); return { ok: true } },
+    })
+    try {
+      const r = await call(wired.handler, postReq('/warroom/api/commands/answer', { commandId: 'cmd-a', text: '就这么办' }))
+      assert.equal(r.body.ok, true)
+      assert.equal(r.body.delivered, true)
+      assert.equal(r.body.status, 'talking')
+      // 送达的是原文与该命令的大副会话（无包装——作答即用户亲言）。
+      assert.deepEqual(delivered, [{ sessionId: 'staff-cmd-a', text: '就这么办' }])
+      // 账面翻 talking；talking 态再答不重复落 directive_talking。
+      assert.equal(loadDirectives(dir).find(d => d.id === 'cmd-a')?.status, 'talking')
+      const r2 = await call(wired.handler, postReq('/warroom/api/commands/answer', { commandId: 'cmd-a', text: '补一句' }))
+      assert.equal(r2.body.ok, true)
+      assert.equal(r2.body.status, 'talking')
+      const talkingEvents = loadDirectives(dir) // fold 态仍 talking 即可；事件计数走文件行
+      assert.ok(talkingEvents !== null)
+      const { readFileSync } = await import('node:fs')
+      const lines = readFileSync(join(dir, 'directives.jsonl'), 'utf8').trim().split('\n')
+      assert.equal(lines.filter(l => l.includes('"directive_talking"')).length, 1)
+      assert.equal(delivered.length, 2)
+    } finally {
+      wired.dispose()
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('件B: answer 终态 → 400；无大副会话 → 409；送达失败 → 502', async () => {
+  const dir = tmpStateDir()
+  try {
+    seedApprovedWithTask(dir, 'cmd-done', 'task-done', 'closed')
+    appendDirectiveEvent(dir, { type: 'directive_created', ts: 't0', directiveId: 'cmd-bare', text: 'x' })
+    const wired = makeHandler({ stateDir: dir, answerStaff: async () => ({ ok: false, message: '宿主通道断' }) })
+    try {
+      const r1 = await call(wired.handler, postReq('/warroom/api/commands/answer', { commandId: 'cmd-done', text: 't' }))
+      assert.equal(r1.body.ok, false)
+      assert.match(r1.body.error, /无需作答/)
+      const r2 = await call(wired.handler, postReq('/warroom/api/commands/answer', { commandId: 'cmd-bare', text: 't' }))
+      assert.equal(r2.body.ok, false)
+      assert.match(r2.body.error, /尚无大副会话/)
+      seedTalkingCommand(dir, 'cmd-c', true)
+      const r3 = await call(wired.handler, postReq('/warroom/api/commands/answer', { commandId: 'cmd-c', text: 't' }))
+      assert.equal(r3.body.ok, false)
+      assert.match(r3.body.error, /未送达/)
+    } finally {
+      wired.dispose()
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('件④: host-workspaces 面缺席 501 / 提供时映射 sessionCount', async () => {
   const dir = tmpStateDir()
   const bare = makeHandler({ stateDir: dir })

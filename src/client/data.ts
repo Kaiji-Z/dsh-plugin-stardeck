@@ -177,6 +177,21 @@ export async function markTalking(commandId: string): Promise<void> {
   }
 }
 
+/** 件B 板上直接作答：答复文本经持久队列送进大副会话续跑（服务端幂等落
+ *  talking 账面；送达回执见 { ok, error }）。 */
+export async function answerCommand(commandId: string, text: string): Promise<{ ok: boolean; status?: string; error?: string }> {
+  try {
+    const res = await fetch('/warroom/api/commands/answer', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ commandId, text }),
+    })
+    return await res.json() as { ok: boolean; status?: string; error?: string }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 /** V5 档位账本：舰长在命令卡上升降档（未分诊/旗关时服务端拒绝）。 */
 export async function regradeCommand(commandId: string, grade: 'L0' | 'L1' | 'L2'): Promise<{ ok: boolean; error?: string }> {
   try {

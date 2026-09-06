@@ -140,6 +140,9 @@ export interface DashboardDeps {
   archiveSession?: (sessionId: string) => Promise<{ ok: true } | { ok: false; code: string; message: string }>
   /** V17 归档核查（只读）：宿主当前会话 id 清单（A-③ 判据用）。缺席返回 null。 */
   listSessions?: () => Promise<string[] | null>
+  /** 件B 板上直接作答：答复文本经持久队列送进大副会话（与 pushToStaff 同通道、
+   *  rpcId 带 warroom- 前缀自滤亲自信号）。缺席 → /commands/answer 如实 501。 */
+  answerStaff?: (sessionId: string, text: string) => Promise<{ ok: boolean; message?: string }>
   /** V18 HQ 工作区注册弹窗：宿主 workspace.list（只读；缺席如实报 null）。 */
   listWorkspaces?: () => Promise<Array<{ workspaceId: string; path: string; title: string; sessionCount: number }> | null>
   /** V18 注册时把真实目录幂等收编进宿主 registry（best-effort，失败不阻塞）。 */
@@ -624,6 +627,50 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           appendDirectiveEvent(deps.stateDir, { type: 'directive_talking', ts: new Date().toISOString(), directiveId: directive.id })
         }
         send(200, { ok: true, status: directive.status })
+        return
+      }
+      if (r.method === 'POST' && pathname === '/warroom/api/commands/answer') {
+        // 件B 板上直接作答：文本经持久队列送进大副会话续跑（跳会话作答的板内
+        // 替身）。账本事件零新增——received 态作答即翻 talking（复用既有事件，
+        // 与「进入对话」同语义）；送达后状态推进靠大副自身的下一枚 directive
+        // 事件（triaged/plan_opened/approved），本路由不代答不代推。
+        if (deps.answerStaff === undefined) {
+          send(501, { ok: false, error: '板上作答通道未接入（answerStaff 面缺席）。' })
+          return
+        }
+        const body = JSON.parse(await readBody(r)) as { commandId?: unknown; text?: unknown }
+        const commandId = typeof body.commandId === 'string' ? body.commandId.trim() : ''
+        const text = typeof body.text === 'string' ? body.text.trim() : ''
+        if (commandId === '' || text === '') {
+          send(400, { ok: false, error: '缺少命令号或答复文本。' })
+          return
+        }
+        if (text.length > 2000) {
+          send(400, { ok: false, error: '答复文本超过 2000 字上限。' })
+          return
+        }
+        const directive = loadDirectives(deps.stateDir).find(d => d.id === commandId)
+        if (directive === undefined) {
+          send(404, { ok: false, error: `命令 ${commandId} 不存在。` })
+          return
+        }
+        if (directive.status === 'approved' || directive.status === 'cancelled') {
+          send(400, { ok: false, error: `命令 ${commandId} 已${directive.status === 'approved' ? '批准出任务' : '取消'}，无需作答。` })
+          return
+        }
+        if (directive.staffSessionId === null || directive.staffSessionId === undefined) {
+          send(409, { ok: false, error: `命令 ${commandId} 尚无大副会话可送达。` })
+          return
+        }
+        if (directive.status === 'received') {
+          appendDirectiveEvent(deps.stateDir, { type: 'directive_talking', ts: new Date().toISOString(), directiveId: directive.id })
+        }
+        const delivered = await deps.answerStaff(directive.staffSessionId, text)
+        if (!delivered.ok) {
+          send(502, { ok: false, error: `答复未送达大副会话：${delivered.message ?? '未知原因'}` })
+          return
+        }
+        send(200, { ok: true, delivered: true, status: directive.status === 'received' ? 'talking' : directive.status })
         return
       }
       if (r.method === 'POST' && pathname === '/warroom/api/commands/regrade') {

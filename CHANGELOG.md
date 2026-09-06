@@ -16,9 +16,16 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 
 ## [Unreleased]
 
+（待积——按发版门，明说「发版」才落版本头。）
+
+## [0.20.4] - 2026-09-06
+
 ### Added
 - **板上直接作答（M2-件B）：talking ghost 行内答复 → 大副会话续跑**——把「答澄清」从「跳进会话自己说」变成板上直接作答。调研定案（DESIGN.md M2-件B 节）：宿主 `ctx.userQuestions` 是提问侧工具调用阻塞面（答题 waterfall 与宿主 UI 抢 claim），正解=持久 followup 收件箱（K17 pushToStaff 同通道）。落点：`POST /warroom/api/commands/answer`（闸序 501/400/404/409；received 态作答先落既有 directive_talking——账本事件零新增；送达后不代答不代推，状态推进靠大副下一枚 directive 事件）+ 聚焦页 talking ghost `TalkingAnswer` 行内组件（Ctrl+Enter、送达即清空可连发、回执绿/红；「进入对话回答」保留给长对话）+ rpcId warroom-answer- 前缀自滤亲自信号。批计划不走此通道（decidePlan 账本路径并存不打架）；prompts.ts 零改动。词典 focusPage +5 键×4 皮肤（trek 派生 参谋→大副）。机测 answer 路由四组；probe-sd-b 双相全绿：P1 种子板 DOM 作答→「已送达大副会话」回执（真实投递织换真会话）；P2 实弹 `??` 命令大副分诊后停等（plan 空前置）→板上作答→**talking→plan 流转**（答案真实驱动 war_plan）。verify PASS。
 - **宿主会话冷清单正典化（M2-件C）：host-sessions 换 sessionQuery + 归档集扣除**——修 M1 适配的 LIVE-only 回归（冷会话在清单里消失，V17 归档核查「归档后消失」沦为假绿）。落点：适配器 sessions.list 优先走 `ctx.get('sessionQuery').listSessions()`（宿主 session-controller 同源正典面：持久层头帧扫描 + live 覆盖，不激活 agent），面缺席/扫描失败诚实回落 LIVE-only；master 的 archiveSession 只把 id 记进 registry `archivedSessionIds`（会话日志留盘），语料天然含归档会话——清单按归档集扣除（宿主侧栏同款语义，内存态零成本）。速度：全量头帧扫描本机 1872 会话暖态 ~3.5s（宿主无内存缓存），<2s 判据靠「起服预热填缓存（sessionQuery inject 触发即后台扫一轮）+ 30s TTL + 归档写路失效（归档后下一读必实扫）」——create 不失效（开机织换连建 ~19 会话逐一失效会打成实扫风暴，实测首响 6.5s；30s TTL 覆盖新会话可见性，消费面无即时需求）；epoch 守卫防在途旧扫描回填。取证：probe-sd-c1.mjs 全新 state 冷起服首响 81ms/二响 15ms、冷全量 1786（含归档扣除）、2024 老 id 在场；shoot-v17 全绿含 ⑦ A-③「3 archived sessions gone from host list」（V17 探针补 _token() 鉴权）。织换标题匹配维持诚实降级（tier-1 真号映射为可靠通道）。
+
+### Removed
+- **设置内图例退役（回流自 stardeck V19.11 / 4c6f017，舰长令「补」）**：设置抽屉「图例（符号对照）」段 + 13 行符号对照整体退役——全部与就地解释重复（◎/↩/！/？ 悬停自带说明、状态 chip 自带文字、色环色键归地图图例、!!/??与档位教学归起草器），「重复广播」第三病灶。词典 legend 块（btn/title/rows）+ legendSection 键 ×4 皮肤同删（copy-en 键形锁两侧同删自动过）；CSS 四行清场（.war-legend-dot* 留——地图图例色点仍在用）；skin.test 图例行两把挫败锁随迁退役（挫败派生另有五处锁在）；verify「图例行在场」正针脚翻负断言（war-legend-rows/图例（符号对照）双 needle 防复活）。DOM 探针：设置分区余 皮肤/语言/视图/字体/行为/连接 六段，零图例 DOM 零 pageerror（取证 .goal/evidence/v1911-settings-legend-retired.png）。verify PASS。
 
 ## [0.20.3] - 2026-09-06
 
@@ -32,7 +39,6 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 - **打回/重试播种钮 + 播种收官（回流自 stardeck V19.7/V19.7.2/V19.8，舰长批）**：①聚焦页任务回报段动作行新增「打回重做」（reported 链）、聚焦页任务段 failed 卡新增「重试」（V19.7.2 收敛孤本——板卡零动作钮原则不破）——备书不下令：起草器预填模板文本（「这个 <任务号> 打回重做，理由是：」）+续接自动钉本战线（重做生成同战线新一代），舰长过目可改，提交才入账；②**播种收官**（舰长批「播种后旧账自动定性」）：播种令提交成功 → 旧账经 `POST /warroom/api/tasks/close` 自动定性——判词 `seedVerdict`（纯函数）点名接续命令号让族谱可溯（「打回定性——重做令已下（cmd-x），重做由该代接续，本账就此收官」），关账失败 actNote 出声不回滚已下之令；端点走 war_close 同款完整通道（dossier+goal 结算+接力征召，`closeTaskInternal` 导出经 DashboardDeps.closeTask 接线），只接受 reported/failed 两态+verdict 非空≤500 字，面缺席如实 501——账本事件语义零新增（复用 task_closed）。词典 taskCard 增 6 键×4 皮肤。机测：seed-verdict 判词四态 + close 路由五闸（缺席/成功/缺参/超长/未知/状态）；DOM 探针 scripts/probe-sd-seed.py 2/2（打回重做→起草器预填断言；坑录：全板每秒重渲染下 Playwright actionability click 恒超时，探针须 DOM 直点）。verify PASS。
 
 ### Removed
-- **设置内图例退役（回流自 stardeck V19.11 / 4c6f017，舰长令「补」）**：设置抽屉「图例（符号对照）」段 + 13 行符号对照整体退役——全部与就地解释重复（◎/↩/！/？ 悬停自带说明、状态 chip 自带文字、色环色键归地图图例、!!/??与档位教学归起草器），「重复广播」第三病灶。词典 legend 块（btn/title/rows）+ legendSection 键 ×4 皮肤同删（copy-en 键形锁两侧同删自动过）；CSS 四行清场（.war-legend-dot* 留——地图图例色点仍在用）；skin.test 图例行两把挫败锁随迁退役（挫败派生另有五处锁在）；verify「图例行在场」正针脚翻负断言（war-legend-rows/图例（符号对照）双 needle 防复活）。DOM 探针：设置分区余 皮肤/语言/视图/字体/行为/连接 六段，零图例 DOM 零 pageerror（取证 .goal/evidence/v1911-settings-legend-retired.png）。verify PASS。
 - **任务卡处理钮全撤（对齐 stardeck V19.6/V19.6续 的卡面收敛终态）**：①任务列卡面「去验收/去下重试令」钮退役（V20 时改为路由聚焦页段，本轮照 stardeck 更彻底——点卡本体即达聚焦页对应段，卡载钮与之同靶纯属冗余）；②聚焦页链上任务面板与任务回报段的同款跳大副会话钮退役（与底部 ⌁ 任务会话跳钮同靶；该定夺位由播种钮接位，见下条）。TaskCard 摘 onHandle 参、词典 taskCard 退役 handleReview/handleReviewTitle/handleRetry/handleRetryTitle 四键×4 皮肤（EN 键形锁两侧同删）；verify 两正断针脚翻负断言（防复活）。DOM 探针 probe-sd-boardread.py 翻新 5/5（卡面零处理钮/点卡落聚焦页 report 段）。
 
 ### Added

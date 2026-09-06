@@ -129,6 +129,12 @@ export interface DashboardDeps {
     salt(): string
     snapshot(sessionId: string): { verb: string; label: string; ts: string } | null
   }
+  /** M1-件② 亲自对话信号（只读）：user/message → 会话级最近亲自输入时间。
+   * 缺席时投影不带 userSeenAt、revision 不含 presence 盐。 */
+  userSeen?: {
+    salt(): string
+    seenAt(sessionId: string): string | null
+  }
   /** V17 归档扇出：逐会话调宿主 workspaces.archiveSession（不可逆）。
    *  缺席 → /warroom/api/archive 报「宿主归档通道未接入」（Stop-if 探针）。 */
   archiveSession?: (sessionId: string) => Promise<{ ok: true } | { ok: false; code: string; message: string }>
@@ -149,7 +155,7 @@ export interface DashboardDeps {
 const STATUS_ORDER: Record<CampaignState['status'], number> = { published: 0, in_progress: 1, reported: 2, draft: 3, failed: 4, closed: 5 }
 
 /** The board projection served to the war map (pure — reusable by tests). */
-export function boardProjection(stateDir: string, activityOf?: (sessionId: string) => { verb: string; label: string; ts: string } | null): Record<string, unknown>[] {
+export function boardProjection(stateDir: string, activityOf?: (sessionId: string) => { verb: string; label: string; ts: string } | null, userSeenOf?: (sessionId: string) => string | null): Record<string, unknown>[] {
   const campaigns = listCampaignIds(stateDir)
     .map(id => loadCampaign(stateDir, id))
     .filter(t => t.startedAt !== '')
@@ -204,6 +210,8 @@ export function boardProjection(stateDir: string, activityOf?: (sessionId: strin
           endedAt: a.endedAt ?? null,
           outcome: a.outcome ?? null,
           ...(a.outcome === undefined && activityOf !== undefined ? { activity: activityOf(a.sessionId) } : {}),
+          // M1-件②：live attempt 带「舰长最近亲自输入」时间（无记录 null；读投影）。
+          ...(a.outcome === undefined && userSeenOf !== undefined ? { userSeenAt: userSeenOf(a.sessionId) } : {}),
         })),
         troops: [...task.units.values()].map(u => ({
           childId: u.childId,
@@ -397,9 +405,9 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           active: deps.store.get().active,
           warRoot: deps.warRoot,
           hqSessionId: deps.store.get().hqSessionId ?? null,
-          revision: boardRevision(deps.stateDir, deps.activity?.salt()),
+          revision: boardRevision(deps.stateDir, [deps.activity?.salt(), deps.userSeen?.salt()].filter(x => x !== undefined && x !== '').join('+') || undefined),
           commands: directiveProjection(deps.stateDir),
-          tasks: boardProjection(deps.stateDir, deps.activity?.snapshot.bind(deps.activity)),
+          tasks: boardProjection(deps.stateDir, deps.activity?.snapshot.bind(deps.activity), deps.userSeen?.seenAt.bind(deps.userSeen)),
           threads: loadAttachedThreads(deps.stateDir).map(t => ({ sessionId: t.sessionId, note: t.note, attachedAt: t.attachedAt })),
           roster: deps.roster().units.map(u => ({ name: u.name, label: u.label, description: u.description, sandboxMode: u.sandboxMode, source: u.source })),
           rosterErrors: deps.roster().errors,
@@ -849,12 +857,12 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
         sse.setHeader?.('cache-control', 'no-cache')
         sse.setHeader?.('connection', 'keep-alive')
         sse.setHeader?.('x-accel-buffering', 'no')
-        let last = boardRevision(deps.stateDir, deps.activity?.salt())
+        let last = boardRevision(deps.stateDir, [deps.activity?.salt(), deps.userSeen?.salt()].filter(x => x !== undefined && x !== '').join('+') || undefined)
         sse.write('retry: 3000\n\n')
         sse.write(`data: ${JSON.stringify({ rev: last })}\n\n`)
         const watch = setInterval(() => {
           try {
-            const rev = boardRevision(deps.stateDir, deps.activity?.salt())
+            const rev = boardRevision(deps.stateDir, [deps.activity?.salt(), deps.userSeen?.salt()].filter(x => x !== undefined && x !== '').join('+') || undefined)
             if (rev !== last) {
               last = rev
               sse.write(`data: ${JSON.stringify({ rev })}\n\n`)

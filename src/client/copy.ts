@@ -449,6 +449,8 @@ export interface WarCopy {
     attemptFailedNeutral: string
     waitingReport: string
     cardTitle: (sessionId: string) => string
+    /** M1-件② 亲自对话信号：舰长最近亲自进会话输入（relTime 文本）。 */
+    userSeenAgo: (t: string) => string
   }
   /** V9.9 瘦身：任务/会话详情模态已裁撤（详情面只剩聚焦页），detail 词典只剩
    *  会话卡与聚焦页战报面板仍在用的两个词条。 */
@@ -962,6 +964,7 @@ export const warCopy: WarCopy = {
     attemptFailedNeutral: '该次尝试失败——进复盘看全程',
     waitingReport: '证据已核验，等元首翻阅收官',
     cardTitle: sessionId => `指挥官会话 ${sessionId}——点击查看作战详情`,
+    userSeenAgo: t => `你 ${t}亲自入会对话`,
   },
   detail: {
     reportPrefix: ts => `【汇报 · ${ts}】`,
@@ -1482,6 +1485,7 @@ export const plainCopy: WarCopy = {
     attemptFailedNeutral: '该次没成——进复盘看全程',
     waitingReport: '证据已核验，等你验收',
     cardTitle: sessionId => `执行会话 ${sessionId}——点击查看详情`,
+    userSeenAgo: t => `你 ${t}自己发过消息`,
   },
   detail: {
     reportPrefix: ts => `【汇报 · ${ts}】`,

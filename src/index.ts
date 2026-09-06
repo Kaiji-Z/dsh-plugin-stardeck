@@ -38,6 +38,7 @@ import { featureEnabled, runtimeFlags } from './flags.ts'
 import { kickIdleTroops, warTools, armMissingCommanderGoals, closeTaskInternal, type CommanderOps, type SubagentsServiceFace, type WarToolsDeps } from './tools.ts'
 import { conscriptPlan, workspaceConflict } from './rules.ts'
 import { ActivityTracker } from './activity.ts'
+import { createUserSeenTracker } from './user-seen.ts'
 import { parseUnitReportEvent } from './report-capture.ts'
 import { weaveDemoSessions } from './demo-weave.ts'
 import { loadRoster, type Roster } from './units.ts'
@@ -637,6 +638,17 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
   ;(ctx as unknown as { on(event: 'session/event', listener: (session: unknown, ev: unknown) => void): unknown }).on('session/event', onActivityEvent)
+  // M1-件② 亲自对话信号：user/message（人说话，非本插件投递）→ 会话级最近亲自
+  // 输入时间（内存表，纯读投影；rpcId warroom-* 前缀自滤——程序化提示不算）。
+  const userSeen = createUserSeenTracker()
+  const onUserSeenEvent = (session: unknown, ev: unknown): void => {
+    try {
+      userSeen.handle((session as { id?: unknown } | undefined)?.id as string | undefined, ev)
+    } catch {
+      // Additive listener: never propagate into the host event loop.
+    }
+  }
+  ;(ctx as unknown as { on(event: 'session/event', listener: (session: unknown, ev: unknown) => void): unknown }).on('session/event', onUserSeenEvent)
   // Patrol fuse (征召巡检): 90s net for stranded tasks — published with a free
   // workspace but no live commander spawn (crash/restart recovery). Raw Node
   // interval — accessing ctx.setInterval would demand the cordis timer service
@@ -769,7 +781,7 @@ export function apply(ctx: Context, config: Config): void {
         try {
           const agent = await liveAgent(request.payload.sessionId)
           if (agent === undefined) return fail('session-not-found', `session "${request.payload.sessionId}" has no live or resumable agent`)
-          agent.followup({ id: crypto.randomUUID(), role: 'user', content: request.payload.content, source: { kind: 'user' } })
+          agent.followup({ id: crypto.randomUUID(), role: 'user', content: request.payload.content, source: { kind: 'user', rpcId: `warroom-relay-${crypto.randomUUID()}` } })
           return ok({ accepted: true })
         } catch (err) {
           return fail('prompt-failed', String(err))
@@ -897,6 +909,8 @@ export function apply(ctx: Context, config: Config): void {
       // V9.11 R2 执行卡实时活动：session/event → 动词滚动表（只读；盐随动词
       // 变化进 revision，SSE 仍只发 rev）。
       activity: activityTracker,
+      // M1-件②：live attempt 附带 userSeenAt（presence-only 盐）。
+      userSeen,
       // V17 归档扇出：逐会话调宿主 workspaces.archiveSession（不可逆——宿主
       // 无恢复 RPC，dashboard 侧已有链全终局闸）。宿主 RPC 层冷启动有长扫描窗
       // （演示板首分钟内 registry/list 操作可达数十秒）——必须加界但不误伤：

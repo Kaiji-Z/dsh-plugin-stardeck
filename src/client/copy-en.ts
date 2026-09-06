@@ -666,7 +666,7 @@ export const enWarCopy: WarCopy = {
     "noNote": "(external session without a note)",
     "detach": "Unmount",
     "detachTitle": "Remove this external card from the battlefield (the session itself is untouched)",
-    "cardTitle": sessionId=>`Externally mounted session ${sessionId} \u2014 click to enter that session window`
+    "cardTitle": sessionId=>`Externally mounted session ${sessionId} \u2014 click to enter that session window`,
   },
   "session": {
     "attemptN": n=>`Attempt ${n}`,
@@ -674,7 +674,8 @@ export const enWarCopy: WarCopy = {
     "failReason": e=>`Cause of defeat: ${e}`,
     "attemptFailedNeutral": "This attempt failed — open the review for the full run",
     "waitingReport": "Evidence verified — awaiting the Sovereign's review to close",
-    "cardTitle": sessionId=>`Field Commander session ${sessionId} \u2014 click for operation details`
+    "cardTitle": sessionId=>`Field Commander session ${sessionId} \u2014 click for operation details`,
+    "userSeenAgo": t=>`you joined this session ${t} ago`,
   },
   "detail": {
     "reportPrefix": ts=>`[Report \xB7 ${ts}]`,
@@ -1386,7 +1387,8 @@ export const enPlainCopy: WarCopy = {
     "failReason": e=>`Failure reason: ${e}`,
     "attemptFailedNeutral": "This attempt failed — open the review for the full run",
     "waitingReport": "Evidence verified — awaiting your review",
-    "cardTitle": sessionId=>`Execution agent session ${sessionId} \u2014 click for details`
+    "cardTitle": sessionId=>`Execution agent session ${sessionId} \u2014 click for details`,
+    "userSeenAgo": t=>`you messaged this session ${t} ago`,
   },
   "detail": {
     "reportPrefix": ts=>`[Report \xB7 ${ts}]`,

@@ -1545,10 +1545,12 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
                   : null)
             : createElement('div', { className: 'war-tour-hint' },
               liveAttempts.length > 0
-                ? (() => { const la = liveAttempts[0]!.a; return fp.reportLive(activeCopy().execVerb(la.activity?.label ?? activeCopy().starfield.orbIdle), la.n, relTime(la.startedAt)) })()
-                : chain.some(t => t.status === 'published') ? fp.reportQueued
+                ? (() => { const la = liveAttempts[0]!.a; return [fp.reportLive(activeCopy().execVerb(la.activity?.label ?? activeCopy().starfield.orbIdle), la.n, relTime(la.startedAt)),
+                  // M1-件②：live 行尾附亲自对话信号（同 SessionCard 口径）。
+                  ...(la.userSeenAt != null && la.userSeenAt !== '' ? [createElement('span', { className: 'war-userseen', title: la.userSeenAt }, ` · ${activeCopy().session.userSeenAgo(relTime(la.userSeenAt))}`)] : [])] })()
+                : [chain.some(t => t.status === 'published') ? fp.reportQueued
                 : execSessions.length > 0 ? fp.reportSettledSoon
-                : fp.reportNone),
+                : fp.reportNone]),
         ),
       ),
       // 底部两颗会话跳钮（V9.9 舰长定案，代替旧 footer 全部按钮）：直跳原生会话
@@ -1720,6 +1722,11 @@ function SessionCard(task: BoardTask, attempt: BoardAttempt, onDetail: (task: Bo
         createElement('span', { className: 'war-activity-dot', 'aria-hidden': 'true' }),
         createElement('span', { className: 'war-activity-label' }, activeCopy().execVerb(attempt.activity.label)),
       )
+    : null,
+  // M1-件② 亲自对话信号：live attempt 且舰长最近亲自进会话说过话——一行弱提示
+  //（琥珀语义=与你有关），纯读投影不落账本；点卡跳原生会话看原文。
+  outcomeKey === 'live' && attempt.userSeenAt != null && attempt.userSeenAt !== ''
+    ? createElement('div', { className: 'war-userseen', title: attempt.userSeenAt }, activeCopy().session.userSeenAgo(relTime(attempt.userSeenAt)))
     : null,
   outcomeKey === 'failed'
     ? task.lastError !== null && isLatestFailedAttempt(task, attempt)

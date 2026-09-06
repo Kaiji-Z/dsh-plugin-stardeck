@@ -1004,6 +1004,7 @@ body[data-ds-dark-theme] .war-root .war-board.war-mapmode .war-zone{box-shadow:0
 /* V18 critique B2：reduce 守卫必须在基础规则**之后**（同特异性后者胜——放前面会被 934 打穿）。 */
 @media (prefers-reduced-motion:reduce){.war-activity-dot,.war-activity-dot::after{animation:none}}
 .war-activity-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.war-userseen{font-size:calc(12px*var(--war-fs));color:var(--war-wait);padding:1px 0 0;display:flex;align-items:center;gap:6px} /* M1-件② 亲自对话信号（琥珀=与你有关；弱于活动行） */
 @keyframes war-act-pulse{0%,100%{opacity:.35}50%{opacity:1}}
 /* --- V13 战线一等公民：战线头（任务列）/ 航迹（2D SVG）/ 未分组 / 3D 图例 ------ */
 .war-front-group{display:flex;flex-direction:column;gap:8px}

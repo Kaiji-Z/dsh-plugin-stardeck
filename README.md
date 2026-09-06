@@ -120,9 +120,9 @@
 ## 快速开始
 
 ```bash
-# 安装（dsh 内）
-dsh plugin add dsh-plugin-stardeck          # npm（0.20.1 已发布）
-dsh plugin add ./dsh-plugin-stardeck-0.20.1.tgz
+# 安装（dsh 内；版本史见 CHANGELOG——README 不钉版本号）
+dsh plugin add dsh-plugin-stardeck
+dsh plugin add ./dsh-plugin-stardeck-<版本>.tgz
 
 # 从源码跑（在 deepseek-harness checkout 内）
 git clone https://github.com/Kaiji-Z/dsh-plugin-stardeck

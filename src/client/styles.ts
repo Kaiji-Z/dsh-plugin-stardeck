@@ -302,7 +302,7 @@ body[data-ds-dark-theme] .war-root{
 .war-card.clickable{cursor:pointer}
 .war-card.clickable:hover{border-color:var(--war-border-hover);transform:translateY(-1px);box-shadow:var(--war-shadow-1)}
 .war-card-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
-.war-chip{font-size:calc(12px*var(--war-fs));line-height:calc(18px*var(--war-fs));padding:0 8px;border-radius:9px;border:1px solid var(--war-border);color:var(--war-text-2);white-space:nowrap}
+.war-chip{font-size:calc(12px*var(--war-fs));line-height:calc(18px*var(--war-fs));padding:0 8px;border-radius:9px;border:1px solid var(--war-border);color:var(--war-text-2);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis} /* V24.1 回流：大字号下不硬裁（容器内省略号让位） */
 .war-title{font-size:calc(13px*var(--war-fs));font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto;min-width:0}
 .war-taskid{font-size:calc(12px*var(--war-fs));color:var(--war-text-2);font-family:var(--war-font-code)}
 .war-time{font-size:calc(12px*var(--war-fs));color:var(--war-text-2);margin-left:auto;white-space:nowrap}
@@ -424,11 +424,12 @@ body[data-ds-dark-theme] .war-root{
 /* --- V7-③ 族系追踪（悬停高亮 + 聚焦压暗 + 聚焦条） ------------------------------ */
 .war-card.war-rel-dim{opacity:.32}
 .war-card.war-rel-dim:focus-visible,.war-card.war-rel-dim:focus-within{opacity:1}
+.war-card.war-rel-dim.clickable:hover{border-color:var(--war-border);transform:none;box-shadow:none} /* V24.1 回流：聚焦压暗的卡不食悬停供养——非本族系不给可点暗示 */
 .war-card.war-rel-same{border-color:var(--war-run-border);box-shadow:0 0 0 2px var(--war-run-border)}
 .war-focus-btn{padding:0 8px;line-height:calc(22px*var(--war-fs));font-size:calc(17px*var(--war-fs));flex:0 0 auto} /* V10.1 舰长定：聚焦图标加大一档 */
 
 /* --- V7-④ 夜间预检 + 起草器档位/最近命令 ---------------------------------------- */
-.war-card-note{display:flex;align-items:center;min-width:0;min-height:18px;font-size:calc(12px*var(--war-fs));line-height:calc(18px*var(--war-fs));color:var(--war-text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} /* R4 通知行：预检提示/取消原因；空也留位（恒高） */
+.war-card-note{display:flex;align-items:center;min-width:0;min-height:calc(18px*var(--war-fs));font-size:calc(12px*var(--war-fs));line-height:calc(18px*var(--war-fs));color:var(--war-text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} /* R4 通知行：预检提示/取消原因；空也留位（恒高，随 fs——V24.1 回流） */
 .war-card-note.war-preflight{padding:0;border:none;border-radius:0;background:transparent}
 .war-card-note.is-fail{color:var(--war-fail)}
 .war-preflight-text{flex:1 1 auto;min-width:0;font-size:calc(12px*var(--war-fs));color:var(--war-wait);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -915,13 +916,13 @@ body[data-ds-dark-theme] .war-root .war-board.war-mapmode .war-zone{box-shadow:0
 .war-board.war-mapmode .war-dispatch{position:relative;z-index:3;margin-top:auto} /* V17.6 定高/padding 走基规则（滚动条预留进栏高），map 态不再另切 */
 /* --- V10.1 调度坞卡牌组（舰长二改）：纯横向深叠，每卡只露 60px 标签缘，
  * hover 卡浮到组顶显全貌；无 45 度/垂直错位 -------------------------------- */
-.war-root{--war-card-w:316px;--war-card-h:168px;--war-history-card-h:137px} /* 五行恒高卡实测值（probe 校准）；历史卡=R1-R4 无 R5（168-31）。定义在 war-root：组面板 portal 出坞后仍在域内 */
+.war-root{--war-card-w:316px;--war-card-h:calc(168px*var(--war-fs));--war-history-card-h:calc(137px*var(--war-fs))} /* 五行恒高卡实测值（probe 校准）；历史卡=R1-R4 无 R5（168-31）。定义在 war-root：组面板 portal 出坞后仍在域内。V24.1 回流：恒高乘字号系数（1.35 裁底修复），宽度不乘（截断定案不变） */
 :is(.war-dispatch, .war-group-panel) .war-command-card{width:var(--war-card-w);min-width:var(--war-card-w);max-width:var(--war-card-w);height:var(--war-card-h);overflow:hidden;gap:5px} /* 五行卡规格（舰长定）：同尺寸，长文本一行截断 */
 :is(.war-dispatch, .war-group-panel) .war-card-top{flex-wrap:nowrap;overflow:hidden;flex:0 0 auto}
 :is(.war-dispatch, .war-group-panel) .war-command-text{display:block;flex:0 0 auto;white-space:nowrap;-webkit-line-clamp:unset;-webkit-box-orient:initial;text-overflow:ellipsis}
 :is(.war-dispatch, .war-group-panel) .war-life{flex:0 0 auto}
-:is(.war-dispatch, .war-group-panel) .war-card-note{flex:0 0 18px}
-:is(.war-dispatch, .war-group-panel) .war-card-actions{flex:0 0 24px;margin-top:auto;display:flex;align-items:center;gap:6px;min-width:0}
+:is(.war-dispatch, .war-group-panel) .war-card-note{flex:0 0 calc(18px*var(--war-fs))}
+:is(.war-dispatch, .war-group-panel) .war-card-actions{flex:0 0 calc(24px*var(--war-fs));margin-top:auto;display:flex;align-items:center;gap:6px;min-width:0}
 .war-card-actions-empty{font-size:calc(12px*var(--war-fs));line-height:calc(18px*var(--war-fs));color:var(--war-text-3)}
 .war-cmd-group{position:relative;display:block;flex:0 0 auto}
 .war-cmd-group-face{position:relative;display:block}

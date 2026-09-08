@@ -16,7 +16,8 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 
 ## [Unreleased]
 
-（待积——按发版门，明说「发版」才落版本头。）
+### Fixed
+- **V24.1 大字号/聚焦四修（回流自 stardeck d33248c/1db6864，stardeck v0.2.3）**：①五行卡恒高乘字号系数（`--war-card-h:168px→calc(168px*var(--war-fs))`、历史卡 137px 同乘——critique 轮只修了坞高 218px，卡本体漏了，1.35 字号下内容溢出裁底）；②R4 通知行与动作行恒高随 fs（18px/24px calc 化）；③`.war-chip` 补 max-width+省略号（nowrap 无溢出处理=大字号硬裁）；④聚焦压暗卡悬停归零（`.war-rel-dim.clickable:hover` 中性化——非本族系不给可点暗示）。DOM 探针 1.35 字号实测：卡高 226.8px（=168×1.35 精确）、chip ellipsis/hidden 在场、压暗悬停规则生效、零 pageerror（取证 .goal/evidence/v241-font135-cards.png）。同轮记档：**与 stardeck 的正当分叉入 AGENTS 分家声明**——stardeck v0.2.3 分诊两档制（L2 退役）不回流，本仓维持三档（L2 澄清对接持久会话 talking+板上作答，成本低）；签发权绝对化位置分叉（stardeck 成形端/本仓收官端）；会议室弧线（V20-V23）系无头大副形态解，本仓无此代码路径。verify PASS。
 
 ## [0.20.4] - 2026-09-06
 

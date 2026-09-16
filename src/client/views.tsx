@@ -2423,10 +2423,12 @@ export function warView(services: ClientServicesFace): () => ReactNode {
     // V19.7-8 打回/重试播种（回流）：文本+旧账身份进 composeSeed（提交成功后自动定性收官）。
     const [composeSeed, setComposeSeed] = useState<{ text: string; taskId: string; kind: 'reject' | 'retry' } | null>(null)
     // V10-R3a 星域/列表视图偏好（窄屏强制列表——中庭放不下恒星系）。
+    // 舰长令 2026-09-16：无存档默认星域——只有显式选过列表（'list' 落盘）才进列表，
+    // 首次进入/清过存档/隐私模式 localStorage 抛错一律开局星域 3D。
     // 批量定夺选择集（收件箱 plan 行复选；键=`plan:${commandId}`）。
     const [batchSel, setBatchSel] = useState<ReadonlySet<string>>(new Set())
     const [viewPref, setViewPref] = useState<'list' | 'map'>(() => {
-      try { return localStorage.getItem('warroom-cfg-view') === 'map' ? 'map' : 'list' } catch { return 'list' }
+      try { return localStorage.getItem('warroom-cfg-view') === 'list' ? 'list' : 'map' } catch { return 'map' }
     })
     // V10.1 对抗审查 P1：窗口跨 900px 界限即时回退/恢复地图（此前只在渲染时判一次）。
     const [winW, setWinW] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1720))

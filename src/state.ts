@@ -5,7 +5,7 @@
  * @module dsh-plugin-stardeck/state
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { WarGlobalState } from './types.ts'
@@ -38,9 +38,14 @@ export function loadWarState(stateDir: string): WarGlobalState {
 }
 
 export function saveWarState(stateDir: string, state: WarGlobalState): void {
+  // 对抗审查 2026-09-23：原子写——先落 tmp 再 rename 覆盖。半写的 state.json
+  // 会被 loadWarState 降级成 {active:false}，HQ 绑定凭空丢失；rename 保证
+  // 读者看到的要么是完整旧文件、要么是完整新文件，不存在中间态。
   const file = stateFilePath(stateDir)
+  const tmp = `${file}.tmp`
   mkdirSync(dirname(file), { recursive: true })
-  writeFileSync(file, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+  writeFileSync(tmp, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+  renameSync(tmp, file)
 }
 
 /** The store handle shared across command/tool/dashboard wiring. */

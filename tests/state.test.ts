@@ -3,7 +3,7 @@
  * resolveStateDir 三分支（显式 path / DSH_HOME / 家目录缺省）。
  */
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -34,6 +34,19 @@ test('件④: save → load 往返（active + 指针字段；非法字段被规�
     const dirty = loadWarState(dir)
     assert.equal(dirty.active, false)
     assert.equal(dirty.hqSessionId, undefined)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('件④/对抗审查 A4: 原子写——tmp 中转不残留；覆盖式二次 save 语义不变', () => {
+  const dir = tmpDir()
+  try {
+    saveWarState(dir, { version: 2, active: true, hqSessionId: 'hq-1' })
+    saveWarState(dir, { version: 2, active: true, hqSessionId: 'hq-2' }) // rename 覆盖已存在的旧文件
+    assert.deepEqual(loadWarState(dir), { version: 2, active: true, hqSessionId: 'hq-2', commanderChildId: undefined }, 'save→load 往返，后写覆盖前写')
+    assert.equal(existsSync(stateFilePath(dir)), true)
+    assert.equal(existsSync(`${stateFilePath(dir)}.tmp`), false, 'tmp 中转文件不残留')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { appendEvent, loadCampaign } from '../src/events.ts'
 import { boardProjection, dueBounties } from '../src/dashboard.ts'
-import { buildAlarmCron, nextRunOf, parseCron, CronParseError } from '../src/schedule.ts'
+import { assertCronUsable, buildAlarmCron, nextRunOf, parseCron, CronParseError } from '../src/schedule.ts'
 
 function tmpStateDir(): string {
   return mkdtempSync(join(tmpdir(), 'warroom-sched-'))
@@ -93,4 +93,23 @@ test('buildAlarmCron: invalid time/date/empty-dows return empty string (submit d
   assert.equal(buildAlarmCron({ mode: 'daily', time: '25:00', date: '', dows: [] }), '')
   assert.equal(buildAlarmCron({ mode: 'once', time: '09:00', date: '2026-13-01', dows: [] }), '')
   assert.equal(buildAlarmCron({ mode: 'weekly', time: '09:00', date: '', dows: [] }), '')
+})
+
+// ── 对抗审查 2026-09-23：空段/尾随垃圾拒收 + 可满足性校验 ──────────────────
+test('parseCron rejects empty segments and trailing garbage instead of silently widening', () => {
+  // 旧实现：'1,,2' 的空段静默展开为全范围 → 限定星期变每天发。
+  assert.throws(() => parseCron('0 9 * * 1,,2'), CronParseError)
+  assert.throws(() => parseCron('0 9 * * 1,2,'), CronParseError)
+  assert.throws(() => parseCron('0 9 5x * *'), CronParseError)
+  // '/N' 视同 '*/N' 的既有宽容面保留。
+  assert.doesNotThrow(() => parseCron('0/15 9 * * *'))
+})
+
+test('assertCronUsable rejects unsatisfiable crons (2月30日) and accepts normal ones', () => {
+  const now = new Date(2026, 8, 23, 12, 0).getTime()
+  assert.throws(() => { assertCronUsable('0 9 30 2 *', now) }, CronParseError)
+  assert.throws(() => { assertCronUsable('0 9 * * 9', now) }, CronParseError)
+  assert.doesNotThrow(() => { assertCronUsable('0 9 * * *', now) })
+  // 2 月 29 日：未来 5 年内（2028）有触发时机，应通过。
+  assert.doesNotThrow(() => { assertCronUsable('0 9 29 2 *', now) })
 })

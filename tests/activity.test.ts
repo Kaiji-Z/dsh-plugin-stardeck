@@ -110,7 +110,7 @@ test('V9.11 R2 revision 盐: 只随动词变化（同动词连发不空转 SSE�
   assert.notEqual(t.salt(), s2)
 })
 
-test('V9.12 R1 滚动表驱逐: 最旧 ts 先驱逐——持续活跃的会话永不被挤掉（旧 FIFO 会）', () => {
+test('V9.12 R1 滚动表驱逐: 持续活跃的会话永不被挤掉（旧 FIFO 会；A8 起按 LRU 判定）', () => {
   let nowMs = Date.parse(T0)
   const t = new ActivityTracker(() => new Date(nowMs).toISOString())
   const bump = (step = 1000): void => { nowMs += step }
@@ -121,10 +121,22 @@ test('V9.12 R1 滚动表驱逐: 最旧 ts 先驱逐——持续活跃的会话�
     if (i % 10 === 0) { t.handle('live', ev('step/start')); bump(5000) }
   }
   // 断言与旧实现分野：插入序 FIFO 在第一次溢出（第 257 个会话）就驱逐 live；
-  // 最旧 ts 驱逐只清 stale-*（ts 远早于 live 的每次刷新）。
+  // LRU 驱逐只清 stale-*（live 的访问随每次 handle 持续刷新）。
   assert.notEqual(t.snapshot('live'), null)
   assert.equal(t.snapshot('stale-0'), null)
   assert.equal(t.snapshot('stale-1'), null)
+})
+
+test('对抗审查 A8: 驱逐按 LRU——安静但最近被板读的会话存活，更旧的被逐', () => {
+  const t = new ActivityTracker(() => T0)
+  t.handle('quiet-but-read', ev('step/start')) // 最早插入、之后安静（长工具调用中）
+  t.handle('older', ev('step/start')) // 同期插入，之后再无人读
+  for (let i = 0; i < 254; i++) t.handle(`s-${i}`, ev('step/start')) // 恰满 256
+  t.snapshot('quiet-but-read') // 板投影读取刷新 lastAccess（旧 ts 策略不认读取）
+  t.handle('overflow', ev('step/start')) // 第 257 个 → 触发驱逐
+  assert.notEqual(t.snapshot('quiet-but-read'), null, '安静但最近被读的存活（LRU）')
+  assert.equal(t.snapshot('older'), null, '更旧未被读的被逐')
+  assert.notEqual(t.snapshot('overflow'), null, '新会话在表')
 })
 
 test('V9.11 R2 revision: 活动盐折叠进 boardRevision（动词变→revision 变；SSE 仍只发 rev）', () => {

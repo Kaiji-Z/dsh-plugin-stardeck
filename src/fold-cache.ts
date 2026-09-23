@@ -6,7 +6,9 @@
  * 不存在同尺寸覆写，mtime+size 联合判据可靠。
  *
  * 只缓存「解析后的原始事件数组」，不缓存 fold 结果——fold 是纯 CPU（微秒级），
- * IO+JSON.parse 才是大头；缓存 fold 会把可变对象跨调用方共享，风险不成比例。
+ * IO+JSON.parse 才是大头。缓存数组以 Object.freeze 返回（对抗审查 2026-09-23）：
+ * 跨调用方共享的是冻结引用，消费者原地 .sort()/.push() 在严格模式下直接抛
+ * TypeError——可变对象共享的毒化风险被结构性封死，不再依赖各调用点自律。
  * state.json 不进缓存（writeFileSync 覆写式，同尺寸覆写真实存在）。
  * @module dsh-plugin-stardeck/fold-cache
  */
@@ -41,7 +43,7 @@ export function readJsonlCached<T>(file: string, parse: (line: string) => T): T[
   const hit = cache.get(file)
   if (hit !== undefined && hit.mtimeMs === st.mtimeMs && hit.size === st.size) {
     probe.cacheHits += 1
-    return hit.value as T[]
+    return hit.value as T[] // 冻结引用（见模块注释）：命中与未命中同一份不可变底账
   }
   probe.fileReads += 1
   const value: T[] = []
@@ -54,8 +56,10 @@ export function readJsonlCached<T>(file: string, parse: (line: string) => T): T[
       // Crash-torn tail line: ignore, the log stays append-only.
     }
   }
-  cache.set(file, { mtimeMs: st.mtimeMs, size: st.size, value })
-  return value
+  // 冻结引用以 T[] 面示调用方（既有消费面零改动）；运行时原地变异照抛 TypeError。
+  const frozen = Object.freeze(value) as T[]
+  cache.set(file, { mtimeMs: st.mtimeMs, size: st.size, value: frozen })
+  return frozen
 }
 
 /** Cache counters for tests and trace（B1-件③ 机检判据的读计数器）。 */

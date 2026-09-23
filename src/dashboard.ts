@@ -15,7 +15,7 @@ import { appendDirectiveEvent, chainHueSlot, deriveContinuation, loadDirectives,
 import type { ContinuationMode, ContinuationTaskFace } from './directives.ts'
 import { appendEvent, listCampaignIds, loadCampaign, readEvents } from './events.ts'
 import { appendThreadEvent, loadAttachedThreads } from './threads.ts'
-import { nextRunOf, parseCron } from './schedule.ts'
+import { assertCronUsable, nextRunOf } from './schedule.ts'
 import { queuePositionOf } from './rules.ts'
 import type { Roster } from './units.ts'
 import type { WarStore } from './state.ts'
@@ -37,20 +37,73 @@ interface ResFace {
   end(body?: string): void
   write?(chunk: string): unknown
   on?(event: string, cb: () => void): void
+  /** C1（对抗审查 2026-09-23）：真实 HTTP 状态码出线——send() 写入。可选属性：
+   *  假 res（纯路由测试）无此字段也能安全挂上；宿主传入的是真 ServerResponse，
+   *  赋值即真实生效（旧 `void code` 把全部 400/401/404/409/413/500/501/502
+   *  都以 HTTP 200 出线）。 */
+  statusCode?: number
 }
 
-/** Read a request body as a string (the commands POST channel). */
+/** 请求体上限（C2）：64KB——超限立即停止累积并按 413 拒。 */
+const BODY_LIMIT = 64 * 1024
+
+/** 可识别的请求体错误（C2/C3）：readBody/readJsonBody 抛出；外层 catch 按
+ * `status` 出线，不再一律 500 回显 V8 原文。 */
+class HttpBodyError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message)
+  }
+}
+
+/** Read a request body as a string (the commands POST channel).
+ * C2 加固：64KB 上限（超限 413 拒）；补 error/aborted 监听——请求中途断线
+ * resolve('')，不再挂起 handler。 */
 function readBody(req: unknown): Promise<string> {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     const r = req as { on?(event: string, cb: (chunk?: unknown) => void): void }
     const parts: string[] = []
     if (r.on === undefined) {
       resolve('')
       return
     }
-    r.on('data', chunk => { parts.push(typeof chunk === 'string' ? chunk : String(chunk)) })
-    r.on('end', () => resolve(parts.join('')))
+    let settled = false
+    let size = 0
+    const settle = (act: () => void): void => {
+      if (settled) return
+      settled = true
+      act()
+    }
+    r.on('data', chunk => {
+      if (settled) return
+      const s = typeof chunk === 'string' ? chunk : String(chunk)
+      size += s.length
+      if (size > BODY_LIMIT) {
+        settle(() => reject(new HttpBodyError('请求体超过 64KB 上限。', 413)))
+        return
+      }
+      parts.push(s)
+    })
+    r.on('end', () => settle(() => resolve(parts.join(''))))
+    r.on('error', () => settle(() => resolve('')))
+    r.on('aborted', () => settle(() => resolve('')))
   })
+}
+
+/** C3：readBody + JSON.parse——坏 JSON 抛可识别错误按 400 干净文案出线
+ * （旧路：裸 JSON.parse 的 SyntaxError 落外层 catch 出 500 并回显 V8 原文
+ * 如 "Unexpected end of JSON input"）。 */
+async function readJsonBody(req: unknown): Promise<unknown> {
+  const text = await readBody(req)
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new HttpBodyError('请求体不是合法 JSON。', 400)
+  }
+}
+
+/** C4 反射截断：错误文案里对入参的反射最多 120 字符——10KB 入参不再整段回显。 */
+function clipForError(s: string): string {
+  return s.length > 120 ? `${s.slice(0, 120)}…` : s
 }
 
 /**
@@ -84,7 +137,7 @@ export function boardRevision(stateDir: string, activitySalt?: string): string {
     const st = statSync(join(stateDir, 'planets.jsonl'))  // V18：星球注册入 revision（SSE 推板刷新）
     sig += `planets:${st.mtimeMs}:${st.size};`
   } catch {
-    sig += 'directives:-;'
+    sig += 'planets:-;' // C6：复制粘贴错写的 'directives:-;' 正名（缺档标签语义）
   }
   try {
     const st = statSync(join(stateDir, 'threads.jsonl'))
@@ -329,7 +382,7 @@ export function traceProjection(
 ): { ok: false; code: 400 | 404; error: string } | { ok: true; command: Record<string, unknown>; timeline: { directive: unknown[]; campaign: unknown[] }; task: Record<string, unknown> | null; fuse: { pendingRelay: boolean; scheduledPending: boolean }; conscription: { spawned: readonly string[]; skips: Readonly<Record<string, string>>; spawnedForTask: boolean; skipReasonForTask: string | null } | null } {
   if (commandId === '') return { ok: false, code: 400, error: '缺少 commandId（用法：/warroom/api/trace?commandId=<命令号>）。' }
   const d = loadDirectives(stateDir).find(x => x.id === commandId)
-  if (d === undefined) return { ok: false, code: 404, error: `命令 ${commandId} 不存在。` }
+  if (d === undefined) return { ok: false, code: 404, error: `命令 ${clipForError(commandId)} 不存在。` } // C4：入参反射截断
   const campaignEvents = d.taskId !== undefined ? readEvents(stateDir, d.taskId) : []
   const task = d.taskId !== undefined
     ? (boardProjection(stateDir) as Array<Record<string, unknown>>).find(t => t.taskId === d.taskId) ?? null
@@ -386,7 +439,9 @@ export function workspaceFileGuardError(warRoot: string, ws: string, name: strin
   // 工作区全在 war_root 下，插件形态的注册星球是任意用户目录——**账本注册面即
   // 授权面**（allowedAbs=注册星球 resolve 集）；war_root 包含只覆盖沙盒自建工作
   // 区。name 相对+不越 wsAbs 两道闸对两类一视同仁。
-  if (!inside(root, wsAbs) && !allowedAbs.includes(wsAbs)) return '该工作区不在 war_root 管辖内，拒绝访问'
+  // C11（对抗审查 2026-09-23）：allowedAbs 比较改大小写不敏感（两侧 toLowerCase）
+  // ——Windows FS 不区分大小写，旧精确比较把大小写不一致的合法注册星球误 403。
+  if (!inside(root, wsAbs) && !allowedAbs.some(a => a.toLowerCase() === wsAbs.toLowerCase())) return '该工作区不在 war_root 管辖内，拒绝访问'
   if (!inside(wsAbs, file)) return '文件路径越出工作区（拒绝路径穿越）'
   return null
 }
@@ -397,9 +452,9 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
     const w = res as ResFace
     const pathname = new URL(r.url ?? '/', 'http://local').pathname
     const send = (code: number, body: unknown): void => {
+      w.statusCode = code // C1：状态码真实写入（真 ServerResponse 赋值即生效）
       w.setHeader?.('content-type', 'application/json; charset=utf-8')
       w.end(JSON.stringify(body))
-      void code
     }
     try {
       if (r.method === 'GET' && pathname === '/warroom/api/board') {
@@ -456,7 +511,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
       if (r.method === 'POST' && pathname === '/warroom/api/workspace/reveal') {
         // V19 战报可读性回流：本机资源管理器落到产物所在目录（不开任何写通道
         // ——账本零改动）。限界与 file 端点同一守卫；无 name=直接开工作区目录。
-        const body = JSON.parse(await readBody(r)) as { ws?: unknown; name?: unknown }
+        const body = await readJsonBody(r) as { ws?: unknown; name?: unknown }
         const ws = typeof body.ws === 'string' ? body.ws : ''
         const name = typeof body.name === 'string' ? body.name : ''
         const allowedAbs = loadPlanets(deps.stateDir).map(p => resolve(p.path))
@@ -482,7 +537,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
       if (r.method === 'POST' && pathname === '/warroom/api/planets') {
         // V18 注册工作区为星球：闸=磁盘真实目录（舰长令：星球不得是「不存在
         // 文件夹的行星」）；宿主 registry 收编 best-effort（幂等 create）。
-        const body = JSON.parse(await readBody(r)) as { path?: unknown; title?: unknown }
+        const body = await readJsonBody(r) as { path?: unknown; title?: unknown }
         const path = typeof body.path === 'string' ? body.path.trim() : ''
         const title = typeof body.title === 'string' && body.title.trim() !== '' ? body.title.trim() : null
         if (path === '') { send(400, { ok: false, error: '缺少工作区路径。' }); return }
@@ -504,7 +559,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
         // cron = 定时下达（到点 tick 补 dispatched 后引信才取；一次性）。
         // V10: 可选 continuesFrom = 战线续接——父命令必须存在，续接模式按
         // 其当时状态冻结（嫁接是历史不是开关）；推导失败给明确拒绝理由。
-        const body = JSON.parse(await readBody(r)) as { text?: unknown; cron?: unknown; continuesFrom?: unknown; name?: unknown }
+        const body = await readJsonBody(r) as { text?: unknown; cron?: unknown; continuesFrom?: unknown; name?: unknown }
         const text = typeof body.text === 'string' ? body.text.trim() : ''
         // V15 战线命名（可选，≤24 字；舰长下达时给，不填=命令原文当战线名）。
         const name = typeof body.name === 'string' ? body.name.trim().slice(0, 24) : ''
@@ -523,7 +578,11 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
             return
           }
           try {
-            parseCron(body.cron)
+            // C9（对抗审查 2026-09-23）：可满足性升级——'0 9 30 2 *'（2 月 30 日）
+            // 类可解析但永不到点的表达式同样拒收：合法入库后每次板请求/每 30s tick
+            // 都要烧满 5 年游走 CPU，且任务令永不触发、无任何报错。段落校验
+            // （4 段→400）不变——assertCronUsable 内部先 parseCron，同抛 CronParseError。
+            assertCronUsable(body.cron, Date.now())
           } catch (err) {
             send(400, { ok: false, error: err instanceof Error ? err.message : 'cron 表达式不合法。' })
             return
@@ -587,7 +646,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
       if (r.method === 'POST' && pathname === '/warroom/api/threads') {
         // v3 挂载: pin an externally-created session onto the battlefield as
         // an「外部」card. Registry only — never writes into the session.
-        const body = JSON.parse(await readBody(r)) as { sessionId?: unknown; note?: unknown }
+        const body = await readJsonBody(r) as { sessionId?: unknown; note?: unknown }
         const sessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
         const note = typeof body.note === 'string' ? body.note.trim() : ''
         if (sessionId === '' || sessionId.length > 200) {
@@ -603,7 +662,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
         return
       }
       if (r.method === 'POST' && pathname === '/warroom/api/threads/detach') {
-        const body = JSON.parse(await readBody(r)) as { sessionId?: unknown }
+        const body = await readJsonBody(r) as { sessionId?: unknown }
         const sessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
         if (sessionId === '') {
           send(400, { ok: false, error: '缺少会话号。' })
@@ -616,7 +675,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
       if (r.method === 'POST' && pathname === '/warroom/api/commands/talking') {
         // Fired by the client when the user opens the staff conversation
         // from a received command card — the card flips to 对话中.
-        const body = JSON.parse(await readBody(r)) as { commandId?: unknown }
+        const body = await readJsonBody(r) as { commandId?: unknown }
         const commandId = typeof body.commandId === 'string' ? body.commandId.trim() : ''
         const directive = loadDirectives(deps.stateDir).find(d => d.id === commandId)
         if (directive === undefined) {
@@ -638,7 +697,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           send(501, { ok: false, error: '板上作答通道未接入（answerStaff 面缺席）。' })
           return
         }
-        const body = JSON.parse(await readBody(r)) as { commandId?: unknown; text?: unknown }
+        const body = await readJsonBody(r) as { commandId?: unknown; text?: unknown }
         const commandId = typeof body.commandId === 'string' ? body.commandId.trim() : ''
         const text = typeof body.text === 'string' ? body.text.trim() : ''
         if (commandId === '' || text === '') {
@@ -680,7 +739,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           send(404, { ok: false, error: `路由不存在：${r.method ?? 'GET'} ${pathname}` })
           return
         }
-        const body = JSON.parse(await readBody(r)) as { commandId?: unknown; grade?: unknown; reason?: unknown }
+        const body = await readJsonBody(r) as { commandId?: unknown; grade?: unknown; reason?: unknown }
         const commandId = typeof body.commandId === 'string' ? body.commandId.trim() : ''
         const grade = typeof body.grade === 'string' ? body.grade.trim() : ''
         const reason = typeof body.reason === 'string' && body.reason.trim() !== '' ? body.reason.trim() : '舰长命令卡升降档'
@@ -715,7 +774,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           send(404, { ok: false, error: `路由不存在：${r.method ?? 'GET'} ${pathname}` })
           return
         }
-        const body = JSON.parse(await readBody(r)) as { commandId?: unknown; decision?: unknown; note?: unknown }
+        const body = await readJsonBody(r) as { commandId?: unknown; decision?: unknown; note?: unknown }
         const commandId = typeof body.commandId === 'string' ? body.commandId.trim() : ''
         const decision = typeof body.decision === 'string' ? body.decision.trim() : ''
         const note = typeof body.note === 'string' && body.note.trim() !== '' ? body.note.trim() : undefined
@@ -757,7 +816,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           send(501, { ok: false, error: '宿主收官通道未接入（closeTask 面缺席）。' })
           return
         }
-        const body = JSON.parse(await readBody(r)) as { taskId?: unknown; verdict?: unknown }
+        const body = await readJsonBody(r) as { taskId?: unknown; verdict?: unknown }
         const taskId = typeof body.taskId === 'string' ? body.taskId.trim() : ''
         const verdict = typeof body.verdict === 'string' ? body.verdict.trim() : ''
         if (taskId === '' || verdict === '') {
@@ -794,7 +853,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           send(501, { ok: false, error: '宿主归档通道未接入（archiveSession 面缺席）。' })
           return
         }
-        const body = JSON.parse(await readBody(r)) as { commandId?: unknown }
+        const body = await readJsonBody(r) as { commandId?: unknown }
         const commandId = typeof body.commandId === 'string' ? body.commandId.trim() : ''
         if (commandId === '') {
           send(400, { ok: false, error: '缺少命令号。' })
@@ -804,10 +863,6 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
         const directive = directives.find(d => d.id === commandId)
         if (directive === undefined) {
           send(404, { ok: false, error: `命令 ${commandId} 不存在。` })
-          return
-        }
-        if (directive.archived !== undefined) {
-          send(400, { ok: false, error: `命令 ${commandId} 已归档。` })
           return
         }
         // 链全终局闸：链上每条命令要么 cancelled，要么其任务已 closed/failed。
@@ -838,20 +893,30 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           }
         }
         const unique = [...new Set(sessions)]
+        // C5（对抗审查 2026-09-23）归档部分失败幂等续档：重入闸只在「已入档会话
+        // 覆盖全部相关会话」时拒；未覆盖（部分失败留下的缺口、超时≠宿主失败的
+        // 账实分离）时仅对缺失会话补归档，落账 sessions 合并为 [...既往, ...新成功]
+        // （fold 的 directive_archived 是后写覆盖语义，天然支持续档）。
+        const prior = directive.archived?.sessions ?? []
+        if (directive.archived !== undefined && unique.every(s => prior.includes(s))) {
+          send(400, { ok: false, error: `命令 ${commandId} 已归档。` })
+          return
+        }
+        const toArchive = unique.filter(s => !prior.includes(s))
         const failed: Array<{ sessionId: string; code: string; message: string }> = []
         const done: string[] = []
         // V17：扇出并行（会话互不依赖；宿主 registry 内部自会串行落盘）——
         // 单 RPC 有 15s 超时界（index 侧），整链最坏 ≈ 一个超时窗而非逐会话累加。
-        const results = await Promise.all(unique.map(async sessionId => ({ sessionId, r: await deps.archiveSession(sessionId) })))
+        const results = await Promise.all(toArchive.map(async sessionId => ({ sessionId, r: await deps.archiveSession(sessionId) })))
         for (const { sessionId, r } of results) {
           if (r.ok) done.push(sessionId)
           else failed.push({ sessionId, code: r.code, message: r.message })
         }
-        if (unique.length > 0 && done.length === 0) {
+        if (toArchive.length > 0 && done.length === 0) {
           send(502, { ok: false, error: '宿主归档全部失败。', failed })
           return
         }
-        appendDirectiveEvent(deps.stateDir, { type: 'directive_archived', ts: new Date().toISOString(), directiveId: commandId, sessions: done })
+        appendDirectiveEvent(deps.stateDir, { type: 'directive_archived', ts: new Date().toISOString(), directiveId: commandId, sessions: [...new Set([...prior, ...done])] })
         // B1-件⑥ 收官清理：链归档后对成员任务的 auto+repo worktree best-effort
         // 释放（bound/instance/普通目录由 releaseTaskWorkspace 自行判否留置；
         // 成败都落 workspace_released 事件，随响应如实返回）。
@@ -900,6 +965,10 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           send(501, { ok: false, error: '此连接不支持事件流（SSE）' })
           return
         }
+        // C7（对抗审查 2026-09-23）：close 监听**进分支先挂**再做 boardRevision/
+        // 首发写——旧序有毫秒级窗口，客户端秒断则 1s interval 永久泄漏。
+        let watch: ReturnType<typeof setInterval> | undefined
+        sse.on?.('close', () => { if (watch !== undefined) clearInterval(watch) })
         sse.setHeader?.('content-type', 'text/event-stream; charset=utf-8')
         sse.setHeader?.('cache-control', 'no-cache')
         sse.setHeader?.('connection', 'keep-alive')
@@ -907,7 +976,13 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
         let last = boardRevision(deps.stateDir, [deps.activity?.salt(), deps.userSeen?.salt()].filter(x => x !== undefined && x !== '').join('+') || undefined)
         sse.write('retry: 3000\n\n')
         sse.write(`data: ${JSON.stringify({ rev: last })}\n\n`)
-        const watch = setInterval(() => {
+        watch = setInterval(() => {
+          // C7：回调自查连接死活——close 事件面缺席（半途销毁）也能自清。
+          const raw = w as { destroyed?: boolean; writableEnded?: boolean }
+          if (raw.destroyed === true || raw.writableEnded === true) {
+            if (watch !== undefined) clearInterval(watch)
+            return
+          }
           try {
             const rev = boardRevision(deps.stateDir, [deps.activity?.salt(), deps.userSeen?.salt()].filter(x => x !== undefined && x !== '').join('+') || undefined)
             if (rev !== last) {
@@ -920,7 +995,6 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
             // Never let a stat hiccup kill the stream.
           }
         }, 1000)
-        sse.on?.('close', () => clearInterval(watch))
         return
       }
       if (deps.spike !== undefined && pathname === '/warroom/api/v5-spike') {
@@ -932,7 +1006,7 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           return
         }
         if (r.method === 'POST') {
-          const body = JSON.parse(await readBody(r)) as { sessionId?: unknown; action?: unknown; text?: unknown }
+          const body = await readJsonBody(r) as { sessionId?: unknown; action?: unknown; text?: unknown }
           const sessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
           if (sessionId === '' || sessionId.length > 200) {
             send(400, { ok: false, error: '缺少 sessionId（贴一个活体会话号，≤200 字符）。' })
@@ -946,8 +1020,13 @@ export function registerDashboard(webServer: RouteRegistry, deps: DashboardDeps)
           return
         }
       }
-      send(404, { ok: false, error: `路由不存在：${r.method ?? 'GET'} ${pathname}` })
+      send(404, { ok: false, error: `路由不存在：${r.method ?? 'GET'} ${clipForError(pathname)}` }) // C4：入参反射截断
     } catch (err) {
+      // C2/C3：请求体类可识别错误按自带状态码出线（413 超限 / 400 坏 JSON）。
+      if (err instanceof HttpBodyError) {
+        send(err.status, { ok: false, error: err.message })
+        return
+      }
       send(500, { ok: false, error: err instanceof Error ? err.message : String(err) })
     }
   }

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { appendDirectiveEvent, loadDirectives } from '../src/directives.ts'
+import { appendDirectiveEvent, loadDirectives, readDirectiveEvents } from '../src/directives.ts'
 import { chainDigest, chainOutcomeOf, createCommandFuse, pivotPromptFor, relayPendingCommands, relayPromptFor, type SessionsApiFace } from '../src/relay.ts'
 import { appendEvent } from '../src/events.ts'
 
@@ -12,8 +12,9 @@ function tmpStateDir(): string {
 }
 
 /** Fake apiProxy sessions face recording every call (ids increment per create;
- * V10 targets 记录每个 prompt 打进的会话号——pivot 断言要用）。 */
-function fakeSessions(opts: { failPrompts?: boolean } = {}): SessionsApiFace & { created: number; prompts: string[]; renamed: string[]; targets: string[] } {
+ * V10 targets 记录每个 prompt 打进的会话号——pivot 断言要用）。
+ * failCreate=true 时第一次 create 返回失败（毒命令场景）。 */
+function fakeSessions(opts: { failPrompts?: boolean; failCreate?: boolean } = {}): SessionsApiFace & { created: number; prompts: string[]; renamed: string[]; targets: string[] } {
   return {
     created: 0,
     prompts: [],
@@ -21,6 +22,9 @@ function fakeSessions(opts: { failPrompts?: boolean } = {}): SessionsApiFace & {
     targets: [],
     async create() {
       this.created += 1
+      if (opts.failCreate === true && this.created === 1) {
+        return { result: { ok: false, error: { code: 'session-spawn-failed', message: 'boom' } } }
+      }
       return { result: { ok: true, value: { sessionId: `sec-${this.created}` } } }
     },
     async rename(_req) {
@@ -123,6 +127,24 @@ test('command fuse: tickNow relays and stop halts the interval', async () => {
   }
 })
 
+test('对抗审查 A5: create 失败只跳过毒命令（不再 throw），同批健康命令照常转达', async () => {
+  const dir = tmpStateDir()
+  try {
+    appendDirectiveEvent(dir, { type: 'directive_created', ts: 't0', directiveId: 'cmd-poison', text: '毒命令' })
+    appendDirectiveEvent(dir, { type: 'directive_created', ts: 't1', directiveId: 'cmd-ok', text: '健康命令' })
+    const sessions = fakeSessions({ failCreate: true })
+    const store = fakeStore(true)
+    const r = await relayPendingCommands({ store, stateDir: dir, warRoot: '/war', activate: () => {} }, sessions)
+    assert.equal(r.relayed, 1, '健康命令成功转达——毒命令不再中断整批')
+    const directives = loadDirectives(dir)
+    assert.equal(directives.find(d => d.id === 'cmd-poison')!.status, 'draft', '毒命令保持 draft 待下 tick 重试')
+    assert.equal(directives.find(d => d.id === 'cmd-ok')!.status, 'received')
+    assert.ok(sessions.prompts.some(p => p.includes('【命令区】新命令 cmd-ok')))
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 // --- V10 战线续接：pivot 直插分路 / 常轨兜底带战线档案 ------------------------
 
 const isoAt = (m: number): string => new Date(Date.UTC(2026, 7, 26, 8, m)).toISOString()
@@ -156,6 +178,11 @@ test('V10 pivot 分路：指令直插活体执行会话队列，一穿五态挂�
     assert.equal(child.status, 'approved', '一穿五态即刻终态归档')
     assert.equal(child.taskId, 'T-9', '挂到父任务号——命令卡天然跳任务链')
     assert.equal(child.staffSessionId, 'cmd-live-1')
+    // 对抗审查 A6：received→approved 两笔经批量接口同批落账，顺序 received 在前。
+    assert.deepEqual(
+      readDirectiveEvents(dir).filter(e => e.directiveId === 'cmd-2').map(e => e.type),
+      ['directive_created', 'directive_received', 'directive_approved'],
+    )
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

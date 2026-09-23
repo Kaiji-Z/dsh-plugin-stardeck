@@ -24,14 +24,17 @@ import { join, relative, resolve, isAbsolute } from 'node:path'
 import { appendDirectiveEvent, loadDirectives, overrideMarkerOf, type DirectiveGrade } from './directives.ts'
 import { registerPlanet } from './planets.ts'
 import { appendDossierEntry, dossierEntryFor } from './dossier.ts'
-import { appendEvent, foldCampaign, isActiveUnit, listCampaignIds, loadCampaign, readEvents } from './events.ts'
+import { appendEvent, ensureCampaignsDir, foldCampaign, isActiveUnit, isPassVerdict, listCampaignIds, loadCampaign, readEvents } from './events.ts'
+import { appendJsonlBatch } from './jsonl.ts'
+import { assertCronUsable } from './schedule.ts'
 import { checkClaim, checkDeployment, conscriptPlan, depsUnsatisfied, normalizeFront, sameWorkspace, workspaceConflict } from './rules.ts'
 import { loadRoster, sandboxDeny, sandboxWrites, unitAgentOptions, type Roster } from './units.ts'
 import { commanderReportHint, mailboxDiscipline, schedulerDiscipline, troopBriefing, troopReportDiscipline } from './persona.ts'
 import { newCampaignId, type WarStore } from './state.ts'
 import { featureEnabled, type FeatureFlags } from './flags.ts'
 import { armGoalForTask, openDisarmedGoalForDirective, settleGoalMentioning, type GoalsFace } from './goals.ts'
-import { QUALITY_TIERS, type CampaignState, type Deliverable, type DescendantFace, type QualityTier, type SubmissionEvidence, type SubtaskRecord, type UnitRecord, type UnitSpec } from './types.ts'
+import { isAutoWorkspace } from './workspace.ts'
+import { QUALITY_TIERS, type CampaignState, type Deliverable, type DescendantFace, type QualityTier, type SubmissionEvidence, type SubtaskRecord, type UnitRecord, type UnitSpec, type WarEvent } from './types.ts'
 
 /** Structural slice of `ctx.subagents` (SubagentRuntime) — the operations warroom uses. */
 export interface SubagentsServiceFace {
@@ -68,6 +71,10 @@ export interface CommanderOps {
   conscript(task: CampaignState, signal: AbortSignal): Promise<{ spawned: true; childId: string } | { spawned: false; reason: string }>
   /** Deliver a notice into one commander session (批注转达). */
   relayTo(sessionId: string, text: string): Promise<boolean>
+  /** B1-重派死锁修复：任务 requeue 回栏（war_fail 重派/巡检判死回收）前显式
+   *  释放 spawn-once 守卫——lazy prune 只清「已离板」任务，requeue 后任务恰回
+   *  published，守卫永不释放=重派死锁。可选面：无征召器环境 no-op。 */
+  releaseSpawned?(taskId: string): void
   /** B1-件⑤ 孤儿 GC：任务终态时清征召器内存表（孤儿/spawned/拒因）并落盘——
    *  可选面，旧假 commander / 无征召器环境 no-op。 */
   forget?(taskId: string): void
@@ -130,6 +137,9 @@ export interface WarToolsDeps {
   commander: CommanderOps
   workspace: WorkspaceOps
   warRoot: string
+  /** B9：V18 auto 物化根（缺省 <warRoot 同级>/warroom-workspaces）——recordDossier
+   *  的合成路径守卫用（缺席时按缺省推导，见 workspace.isAutoWorkspace）。 */
+  workspaceRoot?: string
   /** Feature flags read once at plugin start (VERIFICATION.md §8.3). */
   flags: FeatureFlags
   /** V4-R2 (troop-mailbox): resolve a live agent by session id from the host
@@ -201,6 +211,13 @@ async function startWithToolFilter(deps: WarToolsDeps, spec: {
     const knownSet = new Set(known.split(',').map(s => s.trim()))
     const trimmed = spec.deny.filter(name => knownSet.has(name))
     if (trimmed.length === spec.deny.length) throw err
+    // B12：fail-open 告警——宿主不认识 deny 名单的任何名字（工具名漂移）时，
+    // 只读剥夺整个丢失。保留 fail-open 是次优现实：改 fail-closed 会让「宿主
+    // 名漂移 = 全舰队停摆」，剥夺丢失只影响隔离强度；loud 一行让漂移可诊断
+    //（静默 fail-open 是审查盲区，历史实锤无人察觉）。行为本身不变。
+    if (trimmed.length === 0 && spec.deny.length > 0) {
+      console.warn(`[warroom] toolFilter fail-open：宿主不认识 deny 名单的任何名字（deny=${spec.deny.join(',')}）——只读剥夺未生效，${spec.label} 将带全量工具出动（宿主工具名漂移，请核对 sandbox 名单）。`)
+    }
     return await deps.subagents.startContinuable({ ...base, request: { ...base.request, toolFilter: { deny: trimmed } } })
   }
 }
@@ -245,12 +262,31 @@ function statusOfFactory(deps: WarToolsDeps): (campaignId: string) => CampaignSt
   return id => cache.get(id)
 }
 
+/**
+ * B3 身份门考古：tool handler 拿到的会话标识是 exec.agent.id（与
+ * war_troop_claim 的 isParticipant+持有人+令牌三重门同源；relay 侧
+ * `from: commander.id` 同一通道）。大副侧/跨任务动词的身份判据：
+ * ①该任务所属命令绑定的大副会话（loadDirectives 反查 directive.staffSessionId）
+ * ②HQ（舰长）会话（store.hqSessionId）。孤儿任务（无所属 directive）宽容
+ * 放行——legacy/种子账本先于命令溯源纪律，不追溯。
+ */
+function staffOwnerOf(deps: WarToolsDeps, taskId: string): string | undefined {
+  try {
+    return loadDirectives(deps.stateDir).find(d => d.taskId === taskId)?.staffSessionId
+  } catch {
+    return undefined // 命令账本不可读 → 按孤儿处理（宽容），不让身份门炸主路径
+  }
+}
+
 /** Archive a settled task into its workspace dossier (bound workspaces only —
- * auto-isolated dirs under the war root are one-shot and never revisited). */
+ * auto-isolated dirs under the war root are one-shot and never revisited).
+ * B9：auto 物化根 V18 起搬到 <warRoot 同级>/warroom-workspaces——旧守卫只比
+ * .warroom 前缀失配（auto 任务被误判 bound 而落档案）。isAutoWorkspace 双根
+ * （旧 .warroom + V18 物化根）皆守。 */
 function recordDossier(deps: WarToolsDeps, taskId: string): void {
   try {
     const task = loadCampaign(deps.stateDir, taskId)
-    if (task.workspacePath === undefined || task.workspacePath.startsWith(deps.warRoot)) return
+    if (task.workspacePath === undefined || isAutoWorkspace(task.workspacePath, deps.warRoot, deps.workspaceRoot)) return
     appendDossierEntry(deps.stateDir, task.workspacePath, task.title ?? task.intent, dossierEntryFor(task), new Date().toISOString())
   } catch {
     // Dossier is an enrichment — never block the settling event's return.
@@ -268,6 +304,9 @@ export function killCreditAllGreen(evidence: SubmissionEvidence, workspacePath: 
   if (failed.length > 0) return { green: false, why: `${failed.length} 项验收未过` }
   if (evidence.tests === undefined) return { green: false, why: '未附测试运行记录' }
   if (evidence.tests.exitCode !== 0) return { green: false, why: `测试退出码 ${evidence.tests.exitCode}` }
+  // B4：failed>0 一票否决——只看退出码挡不住「exit_code:0 但 3 项失败」的自报
+  //（命令吞错码/只跑子集都能造出 0）。机械全绿必须真的全绿。
+  if (evidence.tests.failed > 0) return { green: false, why: `测试有 ${evidence.tests.failed} 项失败（passed ${evidence.tests.passed} / failed ${evidence.tests.failed}，退出码 0 不足为凭）` }
   if (evidence.files !== undefined && evidence.files.length > 0) {
     if (workspacePath === undefined) return { green: false, why: '任务无工作区绑定，无法核对越界' }
     const wsRoot = resolve(workspacePath)
@@ -287,6 +326,13 @@ export function killCreditAllGreen(evidence: SubmissionEvidence, workspacePath: 
  * 导出供 index.ts 接线 dashboard 的播种收官路由（V19.8 回流）。 */
 export async function closeTaskInternal(deps: WarToolsDeps, taskId: string, verdict: string, signal: AbortSignal): Promise<string | undefined> {
   appendEvent(deps.stateDir, { type: 'task_closed', ts: new Date().toISOString(), campaignId: taskId, verdict })
+  // B11：定时任务令停用——非通过语义（打回/作废）收官即停摆后续轮次：追加
+  // task_scheduled enabled:false（fold 只落 schedule 不动 status，天然安全；
+  // dueBounties 的 enabled 过滤在扫描侧）。通过判定=质量过关，cron 轮次照常。
+  const settled = loadCampaign(deps.stateDir, taskId)
+  if (settled.schedule !== undefined && settled.schedule.enabled !== false && !isPassVerdict(verdict)) {
+    appendEvent(deps.stateDir, { type: 'task_scheduled', ts: new Date().toISOString(), campaignId: taskId, cron: settled.schedule.cron, enabled: false })
+  }
   recordDossier(deps, taskId)
   // B1-件⑤ 孤儿 GC：终态清征召器账（孤儿会话/spawned 守卫/拒因）——best-effort。
   deps.commander.forget?.(taskId)
@@ -296,7 +342,8 @@ export async function closeTaskInternal(deps: WarToolsDeps, taskId: string, verd
   let nextTaskId: string | undefined
   try {
     const task = loadCampaign(deps.stateDir, taskId)
-    const next = conscriptPlan(boardOf(deps).map(t => ({ taskId: t.campaignId, status: t.status, workspacePath: t.workspacePath, priority: t.priority, startedAt: t.startedAt })))
+    // B2：计划滤 deps——dep-locked 任务不征召（空转+遮蔽同区可跑任务）。
+    const next = conscriptPlan(boardOf(deps).map(t => ({ taskId: t.campaignId, status: t.status, workspacePath: t.workspacePath, priority: t.priority, startedAt: t.startedAt, deps: t.deps })), statusOfFactory(deps))
       .find(t => sameWorkspace(t.workspacePath, task.workspacePath))
     if (next !== undefined) {
       const result = await deps.commander.conscript(loadCampaign(deps.stateDir, next.taskId), signal)
@@ -426,6 +473,12 @@ export function warTools(deps: WarToolsDeps) {
         const lint = lintPublish(args)
         if (!lint.ok) throw new Error(`任务书不过 lint：${lint.reason}`)
       }
+      // B5：cron 发布时校验（dashboard 的 publish-time 校验注释至此名实相符）——
+      // 不合法（段数/取值）或不可满足（2 月 30 日类，5 年内无触发时机）直接拒发，
+      // CronParseError 的 message 已是人话。零写入（先于任何物化/落账）。
+      if (typeof args.cron === 'string' && args.cron.trim() !== '') {
+        assertCronUsable(args.cron.trim(), Date.now())
+      }
       const taskId = newCampaignId()
       const priority = args.priority === 'high' ? 'high' : 'normal'
       const quality = qualityOf(args.quality)
@@ -456,14 +509,10 @@ export function warTools(deps: WarToolsDeps) {
       if (commandId !== '') {
         const directive = loadDirectives(deps.stateDir).find(d => d.id === commandId)
         if (directive === undefined) throw new Error(`命令 ${commandId} 不存在。请核对命令区编号（命令卡上可见）。`)
-        if (directive.status === 'approved') throw new Error(`命令 ${commandId} 已批准过任务 ${directive.taskId}，不要重复发布。`)
-        if (directive.status === 'cancelled') throw new Error(`命令 ${commandId} 已取消，不能再发布任务。`)
-        // V5-R3（flag staff-plan）发布硬门：L1/L2 档位必须先有舰长批准的
-        // 计划（plan.status==='approved'）；L0/未分诊无门（快书直发特性）。
-        if (featureEnabled(deps.flags, 'staff-plan') && (directive.grade === 'L1' || directive.grade === 'L2') && directive.plan?.status !== 'approved') {
-          throw new Error(`命令 ${commandId} 档位为 ${directive.grade}（先计划后做）：${directive.plan === undefined ? '尚未呈报计划——先勘察后用 war_plan 呈计划，舰长批准后才能发布' : directive.plan.status === 'pending' ? '计划待舰长批准（命令卡上批），批准后才能发布' : '计划被驳回——按舰长意见修订计划重呈（war_plan）'}。`)
-        }
-        // V5-R3（flag staff-goal）发布点接力：大副状态机 goal 随发布结算。
+        // B6（V15.1 教义）：goal 结算前移到任何落账之前——await 不再夹在终态
+        // 检查与落账之间（并发双发布的检查-写入竞态窗）；结算后重读命令再过
+        // 终态检查，检查 → directive_approved 落账之间零 await。goal 结算本身
+        // 绝不抛（best-effort 增强），失败=undefined 不阻塞发布。
         if (featureEnabled(deps.flags, 'staff-goal')) {
           const face = deps.goals?.()
           if (face !== undefined && directive.staffSessionId !== undefined) {
@@ -474,18 +523,38 @@ export function warTools(deps: WarToolsDeps) {
             }
           }
         }
-        appendDirectiveEvent(deps.stateDir, { type: 'directive_approved', ts: new Date().toISOString(), directiveId: directive.id, taskId })
+        // 结算 await 之后重读——终态检查面对的是当下账本，不是 await 前的快照。
+        const fresh = loadDirectives(deps.stateDir).find(d => d.id === commandId)
+        if (fresh === undefined) throw new Error(`命令 ${commandId} 不存在。请核对命令区编号（命令卡上可见）。`)
+        if (fresh.status === 'approved') throw new Error(`命令 ${commandId} 已批准过任务 ${fresh.taskId}，不要重复发布。`)
+        if (fresh.status === 'cancelled') throw new Error(`命令 ${commandId} 已取消，不能再发布任务。`)
+        // V5-R3（flag staff-plan）发布硬门：L1/L2 档位必须先有舰长批准的
+        // 计划（plan.status==='approved'）；L0/未分诊无门（快书直发特性）。
+        if (featureEnabled(deps.flags, 'staff-plan') && (fresh.grade === 'L1' || fresh.grade === 'L2') && fresh.plan?.status !== 'approved') {
+          throw new Error(`命令 ${commandId} 档位为 ${fresh.grade}（先计划后做）：${fresh.plan === undefined ? '尚未呈报计划——先勘察后用 war_plan 呈计划，舰长批准后才能发布' : fresh.plan.status === 'pending' ? '计划待舰长批准（命令卡上批），批准后才能发布' : '计划被驳回——按舰长意见修订计划重呈（war_plan）'}。`)
+        }
+        appendDirectiveEvent(deps.stateDir, { type: 'directive_approved', ts: new Date().toISOString(), directiveId: fresh.id, taskId })
         commandApproved = true
       }
-      appendEvent(deps.stateDir, {
-        type: 'task_created', ts: new Date().toISOString(), campaignId: taskId, title: args.title, brief: args.brief, acceptance: args.acceptance, priority, publishedBy: staff.id,
-        ...(quality !== 'common' ? { quality } : {}), ...(depIds.length > 0 ? { deps: depIds } : {}),
-      })
-      appendEvent(deps.stateDir, { type: 'task_published', ts: new Date().toISOString(), campaignId: taskId, workspacePath: ws.path, publishedBy: staff.id, workspaceKind: composeWorkspaceKind(binding.kind, ws, binding.kind === 'bound' ? resolve(binding.path) : undefined) })
-      registerPlanet(deps.stateDir, ws.path)
+      // B6：campaign 侧连写（created+published[+scheduled]）拼单次 write——写级
+      // 原子（appendJsonlBatch），崩溃时整段可见或整段不可见，不产生「有
+      // created 无 published」的悬空中间态。directive_approved 在另一账本
+      // （directives.jsonl），跨文件无单 write 原子——approved 先行、本批随后，
+      // 读侧 fold 双向幂等（approved 无 task 时命令卡如实显示待发布）。
+      const campaignEvents: WarEvent[] = [
+        {
+          type: 'task_created', ts: new Date().toISOString(), campaignId: taskId, title: args.title, brief: args.brief, acceptance: args.acceptance, priority, publishedBy: staff.id,
+          ...(quality !== 'common' ? { quality } : {}), ...(depIds.length > 0 ? { deps: depIds } : {}),
+        },
+        {
+          type: 'task_published', ts: new Date().toISOString(), campaignId: taskId, workspacePath: ws.path, publishedBy: staff.id, workspaceKind: composeWorkspaceKind(binding.kind, ws, binding.kind === 'bound' ? resolve(binding.path) : undefined),
+        },
+      ]
       if (args.cron !== undefined && args.cron.trim() !== '') {
-        appendEvent(deps.stateDir, { type: 'task_scheduled', ts: new Date().toISOString(), campaignId: taskId, cron: args.cron.trim(), enabled: true })
+        campaignEvents.push({ type: 'task_scheduled', ts: new Date().toISOString(), campaignId: taskId, cron: args.cron.trim(), enabled: true })
       }
+      appendJsonlBatch(join(ensureCampaignsDir(deps.stateDir), `${taskId}.jsonl`), campaignEvents)
+      registerPlanet(deps.stateDir, ws.path)
       const war = deps.store.get()
       if (!war.active) {
         war.active = true
@@ -701,13 +770,20 @@ export function warTools(deps: WarToolsDeps) {
       appendEvent(deps.stateDir, { type: 'task_attempt_failed', ts: new Date().toISOString(), campaignId: args.task_id, reason: args.reason, from: commander.id })
       if (attempts < deps.maxAttempts) {
         appendEvent(deps.stateDir, { type: 'task_requeued', ts: new Date().toISOString(), campaignId: args.task_id, reason: `第 ${attempts} 次尝试失败：${args.reason}` })
-        // 自动重试 = 立即为重派的任务派遣新外勤小队（新令牌新会话）。
+        // B1-重派死锁修复：task_requeued 后任务恰回 published——lazy prune 清不
+        // 掉 spawn-once 守卫，必须显式释放；随后立即补征并**消费征召结果**：
+        // 失败时回执如实说（巡检会补征），绝不谎称「已派遣新外勤小队」。
+        let next: string
         try {
-          await deps.commander.conscript(loadCampaign(deps.stateDir, args.task_id), exec.signal)
-        } catch {
-          // 征召失败由巡检保险丝补
+          deps.commander.releaseSpawned?.(args.task_id)
+          const result = await deps.commander.conscript(loadCampaign(deps.stateDir, args.task_id), exec.signal)
+          next = result.spawned
+            ? '已自动重派回任务栏并派遣新外勤小队；新外勤小队将重新 war_claim（新令牌）。'
+            : `已重派回任务栏；新外勤小队派遣未成（${'reason' in result ? result.reason : '未知原因'}），巡检会自动补征。`
+        } catch (err) {
+          next = `已重派回任务栏；新外勤小队派遣未成（${err instanceof Error ? err.message : String(err)}），巡检会自动补征。`
         }
-        return { taskId: args.task_id, status: 'published', attempts, maxAttempts: deps.maxAttempts, next: `已自动重派回任务栏并派遣新外勤小队；新外勤小队将重新 war_claim（新令牌）。` }
+        return { taskId: args.task_id, status: 'published', attempts, maxAttempts: deps.maxAttempts, next }
       }
       appendEvent(deps.stateDir, { type: 'task_failed', ts: new Date().toISOString(), campaignId: args.task_id, reason: `第 ${attempts} 次尝试失败：${args.reason}（重试上限 ${deps.maxAttempts} 已用尽）` })
       recordDossier(deps, args.task_id)
@@ -788,8 +864,15 @@ export function warTools(deps: WarToolsDeps) {
       const staff = requireAgent(exec)
       requireTask(deps, args.task_id)
       appendEvent(deps.stateDir, { type: 'task_commented', ts: new Date().toISOString(), campaignId: args.task_id, comment: args.comment, from: staff.id })
+      // B3 身份门（降级语义）：舰长批注形态（冠【舰长批注】转达外勤小队）仅
+      // HQ/舰长会话或所属命令的大副会话（大副代笔）可设；其余调用方降级为
+      // 普通批注——照常上栏（from=调用方），但不冠冕转达（防外勤组员冒充
+      // 舰长口谕）。孤儿任务无主可查，宽容放行（legacy 兼容）。
+      const ownerStaff = staffOwnerOf(deps, args.task_id)
+      const hq = deps.store.get().hqSessionId
+      const captainForm = ownerStaff === undefined || staff.id === ownerStaff || staff.id === hq
       let relayed: boolean | undefined
-      if (args.relay !== false) {
+      if (args.relay !== false && captainForm) {
         const task = loadCampaign(deps.stateDir, args.task_id)
         // v2.0 征召制：批注经 apiProxy 转达给当前持有该任务的外勤小队会话（领取者）。
         if (task.status === 'in_progress' && task.claimedBy !== undefined) {
@@ -814,9 +897,25 @@ export function warTools(deps: WarToolsDeps) {
     },
     async execute(args, rawExec) {
       const exec = rawExec as unknown as WarToolExec
-      requireAgent(exec) // 大副侧动词：必须在大副会话里调
+      const staff = requireAgent(exec) // 大副侧动词：必须在大副会话里调
       const task = requireTask(deps, args.task_id)
       if (task.status === 'closed') throw new Error(`任务 ${args.task_id} 已收官。`)
+      // B3 身份门：收官判定只认该任务所属命令绑定的大副会话或 HQ（舰长）会话
+      //——「强制人工验收（staff-auto-close 默认 OFF）」不能只靠提示词维持。
+      // 打回/作废（非通过语义）同样走身份门。孤儿任务（无所属 directive，
+      // legacy/种子形态）宽容放行——两道门皆不追溯。
+      const ownerStaff = staffOwnerOf(deps, args.task_id)
+      if (ownerStaff !== undefined) {
+        const hq = deps.store.get().hqSessionId
+        if (staff.id !== ownerStaff && staff.id !== hq) {
+          throw new Error(`收官是大副侧动词：只有任务 ${args.task_id} 所属命令的大副会话或舰长（HQ）会话可记录判定；当前会话 ${staff.id} 无权。请到对应大副会话操作。`)
+        }
+        // 通过语义的状态门：零汇报（in_progress 等）不得折 succeeded——「通过」
+        // 只能记在待翻阅（reported）的任务上；打回/作废不受此限（随时可终局）。
+        if (isPassVerdict(args.verdict) && task.status !== 'reported') {
+          throw new Error(`任务 ${args.task_id} 状态为 ${task.status}，尚无汇报呈批——「通过」判定只能记在待翻阅（reported）的任务上；要终局请用打回/作废语义，或先等外勤小队 war_submit。`)
+        }
+      }
       const nextTaskId = await closeTaskInternal(deps, args.task_id, args.verdict, exec.signal)
       return { taskId: args.task_id, status: 'closed', ...(nextTaskId !== undefined ? { nextTaskId } : {}) }
     },
@@ -849,6 +948,11 @@ export function warTools(deps: WarToolsDeps) {
       const exec = rawExec as unknown as WarToolExec
       const commander = requireAgent(exec)
       const task = requireTask(deps, args.task_id)
+      // B3 身份门：加派组员只认领取本任务的外勤小队本人（claimedBy）——
+      // 外勤组员/外部会话不得在他人的任务里开子代理。
+      if (task.claimedBy !== undefined && commander.id !== task.claimedBy) {
+        throw new Error(`加派组员只限领取任务 ${args.task_id} 的外勤小队本人（${task.claimedBy}）；当前会话 ${commander.id} 无权。`)
+      }
       const roster = deps.roster()
       const spec = findUnit(roster, args.unit)
       // Fronts live inside the task workspace; cross-task isolation is physical.
@@ -890,6 +994,8 @@ export function warTools(deps: WarToolsDeps) {
       const exec = rawExec as unknown as WarToolExec
       const commander = requireAgent(exec)
       const task = requireTask(deps, args.task_id)
+      // B3 身份门：追加命令只限本任务通话方（外勤小队或在役外勤组员）。
+      if (!isParticipant(task, commander.id)) throw new Error(`追加命令只限任务 ${args.task_id} 的通话方（外勤小队或在役外勤组员）；当前会话 ${commander.id} 无权向他队下令。`)
       const unit = task.units.get(args.child_id)
       if (unit === undefined) throw new Error(`任务 ${args.task_id} 中没有外勤组员 ${args.child_id}。可用 war_status 查外勤组员树。`)
       if (unit.recalled !== undefined) throw new Error(`${unit.label} ${args.child_id} 已撤编，无法追加命令；请重新加派组员。`)
@@ -920,6 +1026,8 @@ export function warTools(deps: WarToolsDeps) {
       const exec = rawExec as unknown as WarToolExec
       const commander = requireAgent(exec)
       const task = requireTask(deps, args.task_id)
+      // B3 身份门：撤退只限本任务通话方（外勤小队或在役外勤组员）。
+      if (!isParticipant(task, commander.id)) throw new Error(`撤退只限任务 ${args.task_id} 的通话方（外勤小队或在役外勤组员）；当前会话 ${commander.id} 无权。`)
       const unit = task.units.get(args.child_id)
       if (unit === undefined) throw new Error(`任务 ${args.task_id} 中没有外勤组员 ${args.child_id}。`)
       if (unit.recalled !== undefined) return { childId: args.child_id, status: '已撤编（幂等确认）' }
@@ -1073,8 +1181,13 @@ export function warTools(deps: WarToolsDeps) {
       schema: { type: 'object', additionalProperties: false, properties: { logged: { type: 'boolean', required: true } } },
       render: () => [{ type: 'text', text: commanderReportHint() }],
     },
-    async execute(args) {
+    async execute(args, rawExec) {
+      const exec = rawExec as unknown as WarToolExec
+      const caller = requireAgent(exec)
       const task = requireTask(deps, args.task_id)
+      // B3 身份门：回报登记只限本任务通话方（外勤小队或在役外勤组员）——
+      // 外部会话不得向他人任务的日志里注记。
+      if (!isParticipant(task, caller.id)) throw new Error(`任务回报登记只限任务 ${args.task_id} 的通话方（外勤小队或在役外勤组员）；当前会话 ${caller.id} 无权。`)
       if (!task.units.has(args.child_id)) throw new Error(`任务 ${args.task_id} 中没有外勤组员 ${args.child_id}。`)
       appendEvent(deps.stateDir, { type: 'report_received', ts: new Date().toISOString(), campaignId: args.task_id, childId: args.child_id, summary: args.summary })
       return { logged: true }
@@ -1716,6 +1829,10 @@ export function parseEvidence(raw: unknown): EvidenceVerdict {
     }
     if (t.exit_code !== 0) {
       return { ok: false, reason: `测试没过不能提交：${t.command} 退出码 ${t.exit_code}。先修到退出码 0；确实修不动就 war_fail 上报失败。` }
+    }
+    // B4：failed>0 一票否决——退出码 0 但有失败项（命令吞错码/只跑子集）不算全绿。
+    if (t.failed > 0) {
+      return { ok: false, reason: `测试没过不能提交：${t.command} 有 ${t.failed} 项失败（passed ${t.passed} / failed ${t.failed}），退出码 0 不足为凭。先修到全绿；确实修不动就 war_fail 上报失败。` }
     }
     tests = { command: t.command, exitCode: t.exit_code, passed: t.passed, failed: t.failed }
   }

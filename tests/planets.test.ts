@@ -56,3 +56,15 @@ test('件④: 空目录/无文件 → 空表', () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('C8: stateDir 目录不存在时 registerPlanet 不抛（首请求即建目录）', () => {
+  const base = tmpDir()
+  const dir = join(base, 'deep', 'nested', 'state') // 全新装：目录尚不存在
+  try {
+    const planets = registerPlanet(dir, 'D:/proj/first')
+    assert.equal(planets.length, 1)
+    assert.deepEqual(loadPlanets(dir).map(p => p.path), ['D:/proj/first'])
+  } finally {
+    rmSync(base, { recursive: true, force: true })
+  }
+})

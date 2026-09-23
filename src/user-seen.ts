@@ -39,6 +39,10 @@ export function isPersonalUserMessage(ev: unknown): { at: string } | null {
   return { at }
 }
 
+/** 表项上限（对抗审查 2026-09-23）：超限按插入序剪最旧——宿主长寿命进程里
+ * 会话号只增不减，无封顶的内存表会无限长。8192 条足够任何真实使用面。 */
+const BY_SESSION_CAP = 8192
+
 export function createUserSeenTracker(clock: () => string = () => new Date().toISOString()): UserSeenTracker {
   const bySession = new Map<string, string>()
   return {
@@ -47,6 +51,11 @@ export function createUserSeenTracker(clock: () => string = () => new Date().toI
       const hit = isPersonalUserMessage(ev)
       if (hit === null) return
       bySession.set(sessionId, hit.at)
+      // Map 迭代序=插入序：首键即最旧（重设既有键不改插入位且不涨尺寸）。
+      if (bySession.size > BY_SESSION_CAP) {
+        const oldest = bySession.keys().next().value
+        if (oldest !== undefined) bySession.delete(oldest)
+      }
     },
     seenAt(sessionId) {
       return bySession.get(sessionId) ?? null

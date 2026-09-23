@@ -52,15 +52,22 @@ test('v2.0: POST /warroom/api/commands creates a draft card; talking flips recei
   const dispose = registerDashboard(registry, { store: fakeStore(true) as never, stateDir: dir, roster: () => ({ units: [], errors: [] }) as never, warRoot: '/w' })
   try {
     const ended: string[] = []
-    const res = { setHeader: () => {}, write: () => true, end: (b?: string) => { ended.push(b ?? '') } }
+    const res: { setHeader(): void; write(b: string): boolean; end(b?: string): void; statusCode: number } = {
+      setHeader: () => {},
+      write: () => true,
+      end: (b?: string) => { ended.push(b ?? '') },
+      statusCode: 200,
+    }
     // 新建命令：落到 draft。
     await handler!(postReq('/warroom/api/commands', { text: '帮我做个记账小工具' }), res)
     const created = JSON.parse(ended[ended.length - 1]!) as { ok: boolean; commandId: string }
     assert.equal(created.ok, true)
     assert.ok(created.commandId.startsWith('cmd-'))
+    assert.equal(res.statusCode, 200) // C1：状态码真实出线
     assert.equal(directiveProjection(dir)[0]!.status, 'draft')
     // 空文本 → 400。
     await handler!(postReq('/warroom/api/commands', { text: '   ' }), res)
+    assert.equal(res.statusCode, 400) // C1
     assert.ok(ended[ended.length - 1]!.includes('空'))
     // received 之后 talking 才落事件；draft 状态的 talking 是 no-op。
     await handler!(postReq('/warroom/api/commands/talking', { commandId: created.commandId }), res)
@@ -70,6 +77,7 @@ test('v2.0: POST /warroom/api/commands creates a draft card; talking flips recei
     assert.equal(directiveProjection(dir)[0]!.status, 'talking')
     // 未知命令 → 404。
     await handler!(postReq('/warroom/api/commands/talking', { commandId: 'cmd-nope' }), res)
+    assert.equal(res.statusCode, 404) // C1
     assert.ok(ended[ended.length - 1]!.includes('不存在'))
   } finally {
     dispose()
@@ -128,6 +136,34 @@ test('SSE route: initial revision frame, pushes on change, heartbeats otherwise'
     appendEvent(dir, { type: 'task_closed', ts: 't2', campaignId: 's2', verdict: 'ok' })
     await new Promise(r => setTimeout(r, 1500))
     assert.equal(frames.length, before)
+  } finally {
+    dispose()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('C7: SSE 连接销毁（destroyed，无 close 事件面）→ interval 回调自清不再写帧', async () => {
+  const dir = tmpStateDir()
+  let handler: ((req: unknown, res: unknown) => void | Promise<void>) | undefined
+  const registry: RouteRegistry = { register: route => { handler = route.handler; return () => {} } }
+  const dispose = registerDashboard(registry, { store: fakeStore() as never, stateDir: dir, roster: () => ({ units: [], errors: [] }) as never, warRoot: '/w' })
+  try {
+    const frames: string[] = []
+    const res = {
+      setHeader: () => {},
+      write: (chunk: string) => { frames.push(chunk); return true },
+      end: () => {},
+      on: () => {}, // 不给 close 通道——专测 interval 自查自清路径
+      destroyed: false,
+    }
+    await handler!({ method: 'GET', url: '/warroom/api/events' }, res)
+    assert.ok(frames.some(f => f.startsWith('retry:')), '初始帧照常')
+    // 半途销毁（真实 ServerResponse 会翻 destroyed 标志但不一定有 close 事件面）。
+    res.destroyed = true
+    const before = frames.length
+    // 等一个以上 tick：自清分支应静默退出，不写心跳也不写新 revision。
+    await new Promise(r => setTimeout(r, 1300))
+    assert.equal(frames.length, before, '销毁后 interval 自清——不再有任何新帧（含 : ping）')
   } finally {
     dispose()
     rmSync(dir, { recursive: true, force: true })

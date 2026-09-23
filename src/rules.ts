@@ -6,17 +6,21 @@
  * @module dsh-plugin-stardeck/rules
  */
 
+import { realpathSync } from 'node:fs'
 import type { CampaignState, TaskStatus, UnitRecord } from './types.ts'
 
 /**
  * Normalize a front (前线) to a comparable directory-prefix form: POSIX
  * slashes, no leading './' or '/', no trailing '/', '' and '.' → '.' (root).
+ * B8：大小写不敏感文件系统（win32/darwin）上 key 段整体折叠小写——
+ * 'SRC' 与 'src' 判同前缀（FS 不区分，写前线互斥也不该区分）。
  */
 export function normalizeFront(front: string): string {
   let f = front.trim().replace(/\\/g, '/')
   while (f.startsWith('./')) f = f.slice(2)
   f = f.replace(/\/+/g, '/').replace(/\/+$/, '')
   if (f === '' || f === '.') return '.'
+  if (process.platform === 'win32' || process.platform === 'darwin') f = f.toLowerCase()
   return f
 }
 
@@ -97,10 +101,33 @@ export function depsUnsatisfied(deps: ReadonlyArray<string>, statusOf: (campaign
  * Normalize a workspace path to a comparable key: POSIX slashes, collapsed,
  * no trailing slash, lowercased on case-insensitive filesystems (win32/darwin)
  * so the mutex never leaks on `C:/Proj` vs `c:\proj\`.
+ * B7：词法归一之上叠 best-effort realpath——本机 `C:\Users` 即指向
+ * `d:\users` 的 JUNCTION，同一目录的两写法词法判不出同区（互斥失效
+ * fail-open / 反向误伤 KillCredit fail-closed）。realpath 结果按词法键缓存；
+ * 路径不存在/不可达回退词法归一（行为与改前一致，且不缓存——目录稍后
+ * 物化成 junction 时不会被早先的 miss 钉死）。
  */
+const realpathByKey = new Map<string, string>()
+
+function realpathOf(lexical: string): string {
+  const hit = realpathByKey.get(lexical)
+  if (hit !== undefined) return hit
+  try {
+    const real = realpathSync(lexical)
+    realpathByKey.set(lexical, real)
+    return real
+  } catch {
+    return lexical
+  }
+}
+
 export function normalizeWorkspaceKey(path: string): string {
   let p = path.trim().replace(/\\/g, '/')
   p = p.replace(/\/+/g, '/').replace(/\/+$/, '')
+  if (p !== '') {
+    const real = realpathOf(p)
+    if (real !== p) p = real.replace(/\\/g, '/').replace(/\/+$/, '')
+  }
   if (process.platform === 'win32' || process.platform === 'darwin') p = p.toLowerCase()
   return p
 }
@@ -137,6 +164,10 @@ export interface ConscriptCandidate {
   readonly workspacePath?: string
   readonly priority?: 'normal' | 'high'
   readonly startedAt: string
+  /** B2：前置任务 id 列表（可选）。给出 statusOf 时 deps 未满足的任务被计划
+   *  跳过——被提前征召的 dep-locked 任务只会空转（claim 被拒、简报只发一次）
+   *  且占死工作区唯一名额遮蔽同区可跑任务。 */
+  readonly deps?: ReadonlyArray<string>
 }
 
 /** Conscription precedence: high priority first, then oldest. */
@@ -152,8 +183,11 @@ export function conscriptBeats(a: ConscriptCandidate, b: ConscriptCandidate): bo
  * in_progress holder, the best queued task (high first, then oldest). Tasks
  * without a workspace path (v1.0 auto-isolated dirs) each get their own slot.
  * Pure — the spawn sites and the patrol both consume it.
+ * B2：statusOf 给出时跳过 deps 未满足的 published 任务（与 war_claim 的
+ * depsUnsatisfied 同一判据，住在 rules.ts 无循环 import）；不给 statusOf 的
+ * 旧调用面行为不变（不滤 deps）。
  */
-export function conscriptPlan(tasks: ReadonlyArray<ConscriptCandidate>): ConscriptCandidate[] {
+export function conscriptPlan(tasks: ReadonlyArray<ConscriptCandidate>, statusOf?: (campaignId: string) => TaskStatus | undefined): ConscriptCandidate[] {
   const busy = new Set<string>()
   for (const t of tasks) {
     if (t.status === 'in_progress' && t.workspacePath !== undefined && t.workspacePath.trim() !== '') {
@@ -164,6 +198,7 @@ export function conscriptPlan(tasks: ReadonlyArray<ConscriptCandidate>): Conscri
   const solo: ConscriptCandidate[] = []
   for (const t of tasks) {
     if (t.status !== 'published') continue
+    if (statusOf !== undefined && t.deps !== undefined && depsUnsatisfied(t.deps, statusOf).length > 0) continue
     if (t.workspacePath === undefined || t.workspacePath.trim() === '') {
       solo.push(t)
       continue

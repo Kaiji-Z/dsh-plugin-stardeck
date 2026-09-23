@@ -11,7 +11,7 @@
  * @module dsh-plugin-stardeck/relay
  */
 
-import { appendDirectiveEvent, foldChains, loadDirectives, pendingDirectives, type Directive } from './directives.ts'
+import { appendDirectiveEvent, appendDirectiveEventBatch, foldChains, loadDirectives, pendingDirectives, type Directive } from './directives.ts'
 import { featureEnabled, type FeatureFlags } from './flags.ts'
 import { boardDigest } from './wake.ts'
 import { loadCampaign } from './events.ts'
@@ -128,8 +128,12 @@ export async function relayPendingCommands(deps: CommandFuseDeps, sessions: Sess
         const pushed = await sessions.prompt({ rpcId: rpcId(), payload: { sessionId: live.sessionId, mode: 'queue', content: [{ type: 'text', text: pivotPromptFor(parent.text, directive.id, directive.text, pivotSlice) }] } })
         if (!pushed.result.ok) continue // busy/shape drift：保持 draft，下一 tick 重投同一会话
         const now = new Date().toISOString()
-        appendDirectiveEvent(deps.stateDir, { type: 'directive_received', ts: now, directiveId: directive.id, staffSessionId: live.sessionId })
-        appendDirectiveEvent(deps.stateDir, { type: 'directive_approved', ts: now, directiveId: directive.id, taskId: camp.campaignId })
+        // 对抗审查 2026-09-23：received→approved 两笔连写合并为一次批量追加
+        // （写级原子性——两枚事件要么一起可见、要么一起不可见；顺序保持 received 在前）。
+        appendDirectiveEventBatch(deps.stateDir, [
+          { type: 'directive_received', ts: now, directiveId: directive.id, staffSessionId: live.sessionId },
+          { type: 'directive_approved', ts: now, directiveId: directive.id, taskId: camp.campaignId },
+        ])
         console.log(`[warroom] pivot 续战令 ${directive.id} 已插入执行会话 ${live.sessionId}（挂任务 ${camp.campaignId}）`)
         relayed += 1
         continue
@@ -152,7 +156,13 @@ export async function relayPendingCommands(deps: CommandFuseDeps, sessions: Sess
       }
       const created = await sessions.create({ rpcId: rpcId(), payload: workspaceId !== undefined ? { workspaceId } : { cwd: deps.warRoot } })
       console.log(`[warroom] staff session create → ok=${created.result.ok}${created.result.ok ? ` id=${created.result.value.sessionId}` : ` err=${created.result.error.code}`}`)
-      if (!created.result.ok) throw new Error(`大副会话创建失败：${created.result.error.code}: ${created.result.error.message}`)
+      // 对抗审查 2026-09-23：创建失败不再 throw——一条毒命令（宿主面打嗝）只
+      // 跳过自己（保持 draft 下一 tick 重试），同批其余待转达命令照常走，
+      // 与下方 prompt 失败路径同款对齐。
+      if (!created.result.ok) {
+        console.error(`[warroom] staff session create failed: ${created.result.error.code}: ${created.result.error.message}（${directive.id} 保持 draft，稍后重试）`)
+        continue
+      }
       sessionId = created.result.value.sessionId
       appendDirectiveEvent(deps.stateDir, { type: 'directive_session_opened', ts: new Date().toISOString(), directiveId: directive.id, staffSessionId: sessionId })
       void sessions.rename({ rpcId: rpcId(), payload: { sessionId, title: `大副·${displayTitleOf(directive.text).slice(0, 12)}` } }).catch(() => undefined)

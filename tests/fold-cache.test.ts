@@ -104,3 +104,24 @@ test('件③: directives/threads/planets 三路装载同享缓存语义', () => 
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('件③/对抗审查 A7: 返回数组已冻结——原地变异抛 TypeError，命中返回同一冻结引用', () => {
+  __resetFoldCacheForTests()
+  const dir = tmpDir()
+  try {
+    appendEvent(dir, { type: 'task_created', ts: 't0', campaignId: 'cf1', title: 'x', brief: 'b', acceptance: 'a', priority: 'normal' })
+    appendEvent(dir, { type: 'task_published', ts: 't1', campaignId: 'cf1', workspacePath: '/w' })
+    const a = readEvents(dir, 'cf1')
+    assert.equal(a.length, 2)
+    // 冻结数组上的原地变异（严格模式）必须抛 TypeError——消费者毒化缓存被结构性封死。
+    assert.throws(() => a.sort(), TypeError)
+    assert.throws(() => { a.pop() }, TypeError)
+    // 命中缓存返回同一冻结引用；底账完好。
+    const b = readEvents(dir, 'cf1')
+    assert.equal(b, a, '命中返回同一冻结引用')
+    assert.equal(readEvents(dir, 'cf1').length, 2, '毒化未遂，事件数不变')
+    assert.equal(loadCampaign(dir, 'cf1').status, 'published', 'fold 照常可用')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

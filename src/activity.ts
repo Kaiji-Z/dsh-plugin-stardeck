@@ -121,9 +121,16 @@ export function reduceActivity(cur: AttemptActivity, ev: unknown, now: string): 
  * 会话活动滚动表（内存，不落盘）。handle 由 index.ts 的 session/event 监听器
  * 喂——全量会话皆记（表小且有上限），板投影按 live attempt 的 sessionId 取用。
  */
+interface TrackerEntry {
+  activity: AttemptActivity
+  /** 最近访问序号（单调递增计数器，免时钟）：handle/snapshot 都算访问。 */
+  lastAccess: number
+}
+
 export class ActivityTracker {
-  private readonly bySession = new Map<string, AttemptActivity>()
+  private readonly bySession = new Map<string, TrackerEntry>()
   private clock: () => string
+  private accessSeq = 0
 
   constructor(clock: () => string = () => new Date().toISOString()) {
     this.clock = clock
@@ -131,26 +138,30 @@ export class ActivityTracker {
 
   handle(sessionId: string | undefined, ev: unknown): void {
     if (typeof sessionId !== 'string' || sessionId === '') return
-    const cur = this.bySession.get(sessionId) ?? { verb: { kind: 'idle' } as ActivityVerb, ts: '' }
+    const cur = this.bySession.get(sessionId)?.activity ?? { verb: { kind: 'idle' } as ActivityVerb, ts: '' }
     const next = reduceActivity(cur, ev, this.clock())
-    if (next !== cur) this.bySession.set(sessionId, next)
-    if (this.bySession.size > 256) {
-      // V9.12 R1：按最旧 ts 驱逐——活跃尝试会话 ts 持续刷新，永不成为最旧；
-      // 插入序 FIFO 会把「最早出现但仍在打」的会话挤掉（P2-6）。
-      let oldestId: string | undefined
-      let oldestTs = Number.POSITIVE_INFINITY
-      for (const [id, a] of this.bySession) {
-        const t = a.ts === '' ? 0 : Date.parse(a.ts)
-        if (!Number.isNaN(t) && t < oldestTs) { oldestTs = t; oldestId = id }
-      }
-      if (oldestId !== undefined) this.bySession.delete(oldestId)
+    this.bySession.set(sessionId, { activity: next !== cur ? next : cur, lastAccess: ++this.accessSeq })
+    if (this.bySession.size > 256) this.evictLeastRecentlyUsed()
+  }
+
+  /** 对抗审查 2026-09-23：驱逐改 LRU（按最旧 lastAccess，handle/snapshot 均刷新）。
+   * 旧「最旧 ts」策略会把「长工具调用期间安静但板还在读」的进行中会话逐掉——
+   * ts 只反映动词变化，安静≠无人看。256 上限不动。 */
+  private evictLeastRecentlyUsed(): void {
+    let oldestId: string | undefined
+    let oldest = Number.POSITIVE_INFINITY
+    for (const [id, e] of this.bySession) {
+      if (e.lastAccess < oldest) { oldest = e.lastAccess; oldestId = id }
     }
+    if (oldestId !== undefined) this.bySession.delete(oldestId)
   }
 
   /** 板投影快照：{ verb 稳定标识, label 人读, ts }；无记录 null（重启后自然归零）。 */
   snapshot(sessionId: string): { verb: string; label: string; ts: string } | null {
-    const a = this.bySession.get(sessionId)
-    if (a === undefined) return null
+    const e = this.bySession.get(sessionId)
+    if (e === undefined) return null
+    e.lastAccess = ++this.accessSeq // 板读取即访问——安静但仍在被看的会话不被逐
+    const a = e.activity
     return { verb: a.verb.kind === 'tool' || a.verb.kind === 'tooled' ? `${a.verb.kind}:${a.verb.name}` : a.verb.kind, label: activityLabel(a.verb), ts: a.ts }
   }
 
@@ -160,8 +171,8 @@ export class ActivityTracker {
    */
   salt(): string {
     const parts: string[] = []
-    for (const [id, a] of [...this.bySession.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1))) {
-      const key = a.verb.kind === 'tool' || a.verb.kind === 'tooled' ? `${a.verb.kind}:${a.verb.name}` : a.verb.kind
+    for (const [id, e] of [...this.bySession.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1))) {
+      const key = e.activity.verb.kind === 'tool' || e.activity.verb.kind === 'tooled' ? `${e.activity.verb.kind}:${e.activity.verb.name}` : e.activity.verb.kind
       parts.push(`${id}=${key}`)
     }
     return createHash('sha1').update(parts.join(';')).digest('hex').slice(0, 12)

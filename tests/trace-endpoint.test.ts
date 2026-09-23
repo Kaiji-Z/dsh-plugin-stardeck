@@ -25,11 +25,12 @@ function getReq(url: string): { method: string; url: string } {
 
 interface CapturedRes {
   body: string
-  res: { setHeader(): void; end(b?: string): void }
+  res: { setHeader(): void; end(b?: string): void; statusCode: number }
 }
 
+/** C1 配套：真实捕获 send() 写入的 statusCode（旧假 res 不记状态码）。 */
 function captureRes(): CapturedRes {
-  const out: CapturedRes = { body: '', res: { setHeader: () => {}, end: (b?: string) => { out.body = b ?? '' } } }
+  const out: CapturedRes = { body: '', res: { setHeader: () => {}, end: (b?: string) => { out.body = b ?? '' }, statusCode: 200 } }
   return out
 }
 
@@ -56,6 +57,7 @@ test('件②: 缺 commandId → 400', async () => {
     const cap = captureRes()
     await handler(getReq('/warroom/api/trace'), cap.res)
     const body = JSON.parse(cap.body) as { ok: boolean; error: string }
+    assert.equal(cap.res.statusCode, 400) // C1：状态码真实出线
     assert.equal(body.ok, false)
     assert.match(body.error, /缺少 commandId/)
   } finally {
@@ -71,6 +73,7 @@ test('件②: 未知命令 → 404', async () => {
     const cap = captureRes()
     await handler(getReq('/warroom/api/trace?commandId=cmd-nope'), cap.res)
     const body = JSON.parse(cap.body) as { ok: boolean; error: string }
+    assert.equal(cap.res.statusCode, 404) // C1
     assert.equal(body.ok, false)
     assert.match(body.error, /不存在/)
   } finally {
@@ -95,6 +98,7 @@ test('件②: 已批准有任务的命令 → 200 全量时间线 + 任务投影
     try {
       const cap = captureRes()
       await handler(getReq('/warroom/api/trace?commandId=cmd-1'), cap.res)
+      assert.equal(cap.res.statusCode, 200) // C1
       const body = JSON.parse(cap.body) as {
         ok: boolean
         command: { id: string; status: string; taskId: string; grade: string }
@@ -139,6 +143,7 @@ test('件②: draft 定时命令 → task null + 引信不可见（未到点）+
     try {
       const cap = captureRes()
       await handler(getReq('/warroom/api/trace?commandId=cmd-2'), cap.res)
+      assert.equal(cap.res.statusCode, 200) // C1
       const body = JSON.parse(cap.body) as {
         ok: boolean
         task: null
@@ -169,6 +174,7 @@ test('件②: draft 非定时命令 → 引信待转达', async () => {
     try {
       const cap = captureRes()
       await handler(getReq('/warroom/api/trace?commandId=cmd-3'), cap.res)
+      assert.equal(cap.res.statusCode, 200) // C1
       const body = JSON.parse(cap.body) as { ok: boolean; fuse: { pendingRelay: boolean; scheduledPending: boolean } }
       assert.equal(body.ok, true)
       assert.equal(body.fuse.pendingRelay, true, 'draft 未定时 = 命令引信待转达')
@@ -177,6 +183,25 @@ test('件②: draft 非定时命令 → 引信待转达', async () => {
       dispose()
     }
   } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('C4: 未知命令的超长 commandId → 404 且错误消息截断（不整段反射入参）', async () => {
+  const dir = tmpStateDir()
+  const { handler, dispose } = makeHandler({ stateDir: dir })
+  try {
+    const cap = captureRes()
+    const long = `cmd-${'x'.repeat(10000)}`
+    await handler(getReq(`/warroom/api/trace?commandId=${encodeURIComponent(long)}`), cap.res)
+    const body = JSON.parse(cap.body) as { ok: boolean; error: string }
+    assert.equal(cap.res.statusCode, 404)
+    assert.equal(body.ok, false)
+    assert.ok(body.error.length < 300, `错误消息应受 bound（实际 ${body.error.length} 字符）`)
+    assert.ok(!body.error.includes('x'.repeat(200)), '不得整段反射 10KB 原文')
+    assert.match(body.error, /不存在/)
+  } finally {
+    dispose()
     rmSync(dir, { recursive: true, force: true })
   }
 })

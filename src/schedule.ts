@@ -31,12 +31,18 @@ function parseField(raw: string, field: number): ReadonlySet<number> {
   const [lo, hi] = RANGES[field]!
   const out = new Set<number>()
   for (const part of raw.split(',')) {
+    // 对抗审查 2026-09-23：空段（连续/结尾逗号）必须报错——旧实现静默展开为
+    // 全范围，'0 9 * * 1,,2' 会让限定星期的命令变成每天发。
+    if (part === '') throw new CronParseError(`存在空段（连续或结尾逗号）：${raw}`)
     const [body, stepRaw] = part.split('/')
+    // '/N' 视同 '*/N'（既有宽容面保留）；步长必须是纯数字，'5x' 类尾随垃圾拒收。
+    if (stepRaw !== undefined && !/^\d+$/.test(stepRaw)) throw new CronParseError(`步长不合法：${part}`)
     const step = stepRaw === undefined ? 1 : Number.parseInt(stepRaw, 10)
     if (!Number.isInteger(step) || step < 1) throw new CronParseError(`步长不合法：${part}`)
     let start = lo
     let end = hi
     if (body !== '*' && body !== '') {
+      if (!/^\d+(-\d+)?$/.test(body)) throw new CronParseError(`段不合法：${part}`)
       const range = body.split('-')
       if (range.length > 2) throw new CronParseError(`区间不合法：${part}`)
       start = Number.parseInt(range[0]!, 10)
@@ -76,7 +82,12 @@ export function nextRunMs(fields: CronFields, afterMs: number): number | undefin
   const after = new Date(afterMs)
   // Start from the next minute boundary; zero out sub-minute parts.
   const cursor = new Date(after.getFullYear(), after.getMonth(), after.getDate(), after.getHours(), after.getMinutes() + 1, 0, 0)
+  // 对抗审查 2026-09-23：游标跨度封顶（5 个自然年）优先于迭代计数——
+  // 不可满足表达式（2 月 30 日）不再烧满 263 万次迭代（实测 ~0.65s 同步阻塞）。
+  const horizonStart = cursor.getTime()
+  const horizonMs = 5 * 366 * 24 * 60 * 60 * 1000
   for (let i = 0; i < 60 * 24 * 366 * 5; i++) {
+    if (cursor.getTime() - horizonStart > horizonMs) break
     if (!fields.months.has(cursor.getMonth() + 1)) {
       // Skip the whole month (field-set walking, not minute-scanning).
       cursor.setMonth(cursor.getMonth() + 1, 1)
@@ -105,6 +116,17 @@ export function nextRunMs(fields: CronFields, afterMs: number): number | undefin
 /** Human-facing helper: parse + next run in one step. */
 export function nextRunOf(expr: string, afterMs: number): number | undefined {
   return nextRunMs(parseCron(expr), afterMs)
+}
+
+/** 创建/发布侧可满足性校验（对抗审查 2026-09-23）：解析合法之外，还要求未来
+ * 5 年内至少有一次触发时机。'0 9 30 2 *'（2 月 30 日）类永不触发的表达式在此
+ * 拒绝——落账后它每次求值都要烧满 5 年游走 CPU，且任务令永不到点、无任何报错。
+ * @throws {CronParseError} 表达式不合法或不可满足 */
+export function assertCronUsable(expr: string, nowMs: number): void {
+  const fields = parseCron(expr)
+  if (nextRunMs(fields, nowMs) === undefined) {
+    throw new CronParseError(`未来 5 年内无触发时机（如 2 月 30 日）：${expr}`)
+  }
 }
 
 /** V18.8 闹钟式定时（元首令：cron 裸串对人不友好）：起草器的重复模式 + 时刻

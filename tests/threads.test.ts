@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { appendThreadEvent, foldThreads, loadAttachedThreads, type ThreadEvent } from '../src/threads.ts'
+import { appendThreadEvent, foldThreads, loadAttachedThreads, readThreadEvents, type ThreadEvent } from '../src/threads.ts'
 
 function tmpStateDir(): string {
   return mkdtempSync(join(tmpdir(), 'warroom-threads-'))
@@ -45,6 +45,21 @@ test('v3 挂载: append + load round-trips through threads.jsonl', () => {
     const loaded = loadAttachedThreads(dir)
     assert.deepEqual(loaded.map(t => t.sessionId), ['sess-y'])
     assert.equal(loaded[0]!.note, '另一个')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('对抗审查 A2: 尾部半行后经 API 追加——粘连治愈，新事件全部可读', () => {
+  const dir = tmpStateDir()
+  try {
+    appendThreadEvent(dir, { type: 'thread_attached', ts: 't0', sessionId: 'sess-a', note: 'a' })
+    // 模拟进程崩断留下的半行（无换行）：旧裸 append 会把后续事件粘上来一起吞掉。
+    writeFileSync(join(dir, 'threads.jsonl'), '{"type":"thread_detach', { flag: 'a' })
+    appendThreadEvent(dir, { type: 'thread_attached', ts: 't1', sessionId: 'sess-b', note: 'b' })
+    appendThreadEvent(dir, { type: 'thread_detached', ts: 't2', sessionId: 'sess-a' })
+    assert.equal(readThreadEvents(dir).length, 3, '半行跳过 + 三条好行全可见')
+    assert.deepEqual(loadAttachedThreads(dir).map(t => t.sessionId), ['sess-b'], '半行之后的 attach/detach 均生效')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

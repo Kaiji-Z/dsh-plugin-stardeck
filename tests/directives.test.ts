@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { appendDirectiveEvent, chainHueSlot, deriveContinuation, dueScheduledDirectives, foldChains, foldDirectives, loadDirectives, newDirectiveId, pendingDirectives, readDirectiveEvents, type DirectiveEvent } from '../src/directives.ts'
+import { appendDirectiveEvent, appendDirectiveEventBatch, chainHueSlot, deriveContinuation, dueScheduledDirectives, foldChains, foldDirectives, loadDirectives, newDirectiveId, pendingDirectives, readDirectiveEvents, type DirectiveEvent } from '../src/directives.ts'
 
 function tmpStateDir(): string {
   return mkdtempSync(join(tmpdir(), 'warroom-dir-'))
@@ -236,4 +236,73 @@ test('V17 归档：directive_archived 折出 archived 痕迹（不改 status；�
   assert.deepEqual(d.archived, { at: '2026-08-29T03:00:00Z', sessions: ['sec-a', 'sess-x'] })
   const [d2] = foldDirectives([...events, { type: 'directive_archived', ts: '2026-08-29T04:00:00Z', directiveId: 'cmd-arch-1', sessions: ['sec-a'] }])
   assert.equal(d2.archived?.sessions.length, 1, '重入档 last-wins')
+})
+
+// --- 对抗审查修复批次 2026-09-23（账本与读侧簇）-------------------------------
+
+test('对抗审查 A1: 已取消的定时令跨多个 tick 永不 due（账本不再涨废 dispatched）', () => {
+  const anchor = new Date(2026, 7, 25, 8, 0, 0).toISOString()
+  const folded = foldDirectives([
+    { type: 'directive_created', ts: anchor, directiveId: 'sc-x', text: 'x', cron: '0 9 * * *' },
+    { type: 'directive_cancelled', ts: '2026-08-25T08:05:00Z', directiveId: 'sc-x', reason: '舰长撤令' },
+  ])
+  assert.equal(folded[0]!.status, 'cancelled')
+  assert.equal(folded[0]!.schedule?.dispatchedAt, undefined, '取消先于发令')
+  // 到点后一整天的逐小时采样（30s tick 的代表面）——永不出队。
+  const start = new Date(2026, 7, 25, 9, 30, 0).getTime()
+  for (let h = 0; h < 24; h++) {
+    assert.deepEqual(dueScheduledDirectives(folded, start + h * 3600_000), [], `到点后第 ${h} 小时仍不 due`)
+  }
+  // 对照组：健康 draft 定时令到点即 due（修的是非 draft 拦截，常轨不受影响）。
+  const healthy = foldDirectives([
+    { type: 'directive_created', ts: anchor, directiveId: 'sc-ok', text: 'x', cron: '0 9 * * *' },
+  ])
+  assert.deepEqual(dueScheduledDirectives(healthy, start), ['sc-ok'])
+})
+
+test('对抗审查 A2: 尾部半行后经 API 追加——粘连治愈，新事件全部可读', () => {
+  const dir = tmpStateDir()
+  try {
+    appendDirectiveEvent(dir, { type: 'directive_created', ts: 't0', directiveId: 'cmd-h', text: '好行' })
+    // 模拟进程崩断留下的半行（无换行）：旧裸 append 会把后续事件粘上来一起吞掉。
+    writeFileSync(join(dir, 'directives.jsonl'), '{"type":"directive_rece', { flag: 'a' })
+    appendDirectiveEvent(dir, { type: 'directive_received', ts: 't1', directiveId: 'cmd-h', staffSessionId: 'sec-1' })
+    appendDirectiveEvent(dir, { type: 'directive_talking', ts: 't2', directiveId: 'cmd-h' })
+    assert.equal(readDirectiveEvents(dir).length, 3, '半行跳过 + 三条好行全可见')
+    const folded = loadDirectives(dir)
+    assert.equal(folded[0]!.status, 'talking', '半行之后的两条事件均落账生效')
+    assert.equal(folded[0]!.staffSessionId, 'sec-1')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('对抗审查 A3: newDirectiveId 后缀 8 hex；同秒 1000 个互异', () => {
+  const now = new Date(2026, 7, 23, 10, 0, 0)
+  assert.match(newDirectiveId(now), /^cmd-\d{8}-\d{6}-[0-9a-f]{8}$/)
+  const seen = new Set<string>()
+  for (let i = 0; i < 1000; i++) seen.add(newDirectiveId(now))
+  assert.equal(seen.size, 1000, '同秒批量生成互异')
+})
+
+test('对抗审查 A6: appendDirectiveEventBatch 一次落两笔——顺序保持，fold 终态正确', () => {
+  const dir = tmpStateDir()
+  try {
+    appendDirectiveEvent(dir, { type: 'directive_created', ts: 't0', directiveId: 'cmd-p', text: 'pivot 令' })
+    appendDirectiveEventBatch(dir, [
+      { type: 'directive_received', ts: 't1', directiveId: 'cmd-p', staffSessionId: 'cmd-live-1' },
+      { type: 'directive_approved', ts: 't1', directiveId: 'cmd-p', taskId: 'T-9' },
+    ])
+    assert.deepEqual(
+      readDirectiveEvents(dir).slice(1).map(e => e.type),
+      ['directive_received', 'directive_approved'],
+      'received 在前 approved 在后（同批落账）',
+    )
+    const [d] = loadDirectives(dir)
+    assert.equal(d.status, 'approved')
+    assert.equal(d.staffSessionId, 'cmd-live-1')
+    assert.equal(d.taskId, 'T-9')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

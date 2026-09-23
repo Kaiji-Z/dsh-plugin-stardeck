@@ -30,13 +30,35 @@ export function resolveWarRoot(configured: string): string {
   return configured !== '' ? resolve(configured) : join(process.cwd(), '.warroom')
 }
 
+/** V18 物化根目录名（B9 守卫判据）：resolveWorkspaceRoot 的缺省段——auto 任务
+ *  工作区的共同母目录（.warroom 之外的「真星球」根）。 */
+export const WORKSPACE_ROOT_DIRNAME = 'warroom-workspaces'
+
 /** V18 指定默认目录（舰长令：大副自建工作区=真实文件夹）：配置优先，
  * 缺省 <warRoot 同级>/warroom-workspaces——在 .warroom 之外（非合成沙盒，
  * 任务可挂真实星球）。 */
 export function resolveWorkspaceRoot(configured: string, warRoot: string): string {
   if (configured.trim() !== '') return resolve(configured.trim())
   const wr = resolveWarRoot(warRoot)
-  return join(dirname(wr), 'warroom-workspaces')
+  return join(dirname(wr), WORKSPACE_ROOT_DIRNAME)
+}
+
+/** B9：路径是否 auto 物化根（旧 `.warroom` 根 **或** V18 物化根）之下的合成
+ *  工作区——「auto 任务不写 dossier、征召不按 bound 注入档案」两道守卫的判据。
+ *  旧守卫只比对 .warroom 前缀，V18 物化搬到 warroom-workspaces/ 后失配（auto
+ *  任务被误判 bound）。workspaceRoot 缺席时按缺省物化根推导（与
+ *  resolveWorkspaceRoot 同式），保持旧调用面行为一致。 */
+export function isAutoWorkspace(path: string, warRoot: string, workspaceRoot?: string): boolean {
+  const oldRoot = resolve(warRoot)
+  const effectiveRoot = workspaceRoot !== undefined && workspaceRoot.trim() !== ''
+    ? resolve(workspaceRoot)
+    : join(dirname(oldRoot), WORKSPACE_ROOT_DIRNAME)
+  return isUnder(path, oldRoot) || isUnder(path, effectiveRoot)
+}
+
+function isUnder(path: string, root: string): boolean {
+  const p = resolve(path)
+  return p === root || p.startsWith(root + sep)
 }
 
 /**

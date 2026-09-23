@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
-import { checkClaim, checkDeployment, depsUnsatisfied, frontsOverlap, normalizeFront, normalizeWorkspaceKey, queuePositionOf, sameWorkspace, workspaceConflict } from '../src/rules.ts'
+import { checkClaim, checkDeployment, conscriptPlan, depsUnsatisfied, frontsOverlap, normalizeFront, normalizeWorkspaceKey, queuePositionOf, sameWorkspace, workspaceConflict } from '../src/rules.ts'
 import { foldCampaign } from '../src/events.ts'
-import type { WarEvent } from '../src/types.ts'
+import type { TaskStatus, WarEvent } from '../src/types.ts'
 
 test('normalizeFront canonicalizes fronts', () => {
   assert.equal(normalizeFront(' src/api/ '), 'src/api')
@@ -163,4 +166,76 @@ test('V7-⑤ queuePositionOf：同工作区排队位次（占用 +1 / 更优先�
   // 无工作区 = 独立域恒 0；别的工作区互不影响
   assert.equal(queuePositionOf(all[3]!, all), 0)
   assert.equal(queuePositionOf(all[4]!, all), 0)
+})
+
+// ─── 对抗审查修复批（2026-09-23）：B2 / B7 / B8 回归 ────────────────────────
+
+test('B2: conscriptPlan 跳过 deps 未满足的任务；同工作区可跑任务不被遮蔽', () => {
+  const statuses: Record<string, TaskStatus | undefined> = { 'dep-1': 'in_progress', 'dep-2': 'closed' }
+  const statusOf = (id: string): TaskStatus | undefined => statuses[id]
+  const board = [
+    { taskId: 'dep-1', status: 'in_progress' as const, workspacePath: '/w/dep', startedAt: 't0' },
+    // 高优先但 dep 未满足——被提前征召只会空转（claim 被拒）且占死 /w/a 名额。
+    { taskId: 'locked', status: 'published' as const, workspacePath: '/w/a', priority: 'high' as const, startedAt: 't1', deps: ['dep-1'] },
+    { taskId: 'free', status: 'published' as const, workspacePath: '/w/a', startedAt: 't2', deps: ['dep-2'] },
+    { taskId: 'solo-locked', status: 'published' as const, startedAt: 't3', deps: ['dep-1'] },
+  ]
+  // statusOf 给出：dep-locked（含无工作区的 solo）不入计划，/w/a 的名额让给可跑的 free。
+  assert.deepEqual(conscriptPlan(board, statusOf).map(t => t.taskId), ['free'])
+  // 旧调用面（不给 statusOf）行为不变：不滤 deps——高优先的 locked 照常胜出。
+  assert.deepEqual(conscriptPlan(board).map(t => t.taskId), ['locked', 'solo-locked'])
+})
+
+test('B7: normalizeWorkspaceKey realpath 归一——junction 两写法判同；不存在路径词法回退', () => {
+  // 回退分支：不存在路径行为与改前一致（纯词法归一，且不缓存 miss）。
+  assert.equal(normalizeWorkspaceKey('Z:/no/such/dir/'), lexicalWorkspaceKey('Z:/no/such/dir'))
+  assert.equal(normalizeWorkspaceKey('Z:/no/such/dir/x//'), lexicalWorkspaceKey('Z:/no/such/dir/x'))
+  // 存在路径：真实目录 + junction 别名 → 同一物理目录的两写法归一同键。
+  const real = mkdtempSync(join(tmpdir(), 'warroom-real-'))
+  mkdirSync(join(real, 'w'), { recursive: true }) // realpath 需要完整路径存在才解析
+  const link = join(tmpdir(), `warroom-wslink-${process.pid}`)
+  let linked = true
+  try {
+    symlinkSync(real, link, 'junction')
+  } catch {
+    linked = false // 无 junction 权限/平台不支持：退化为缓存与回退两分支断言
+  }
+  try {
+    if (linked) {
+      assert.equal(sameWorkspace(join(link, 'w'), join(real, 'w')), true, 'junction 别名与真实路径判同工作区（互斥不再 fail-open）')
+      assert.equal(
+        workspaceConflict(join(link, 'w'), [
+          { taskId: 'busy', status: 'in_progress', workspacePath: join(real, 'w') },
+        ])?.taskId,
+        'busy',
+        '别名写法也能命中在役占用',
+      )
+    } else {
+      assert.equal(sameWorkspace(real, real.replaceAll('\\', '/')), true, '同目录两写法判同（斜杠归一兜底）')
+    }
+    // 缓存分支：重复归一结果稳定。
+    assert.equal(normalizeWorkspaceKey(real), normalizeWorkspaceKey(real))
+  } finally {
+    if (linked) rmSync(link, { recursive: true, force: true })
+    rmSync(real, { recursive: true, force: true })
+  }
+})
+
+/** B7 测试辅助：不存在路径的词法归一期望值（与改前行为逐字一致）。 */
+function lexicalWorkspaceKey(path: string): string {
+  let p = path.trim().replace(/\\/g, '/')
+  p = p.replace(/\/+/g, '/').replace(/\/+$/, '')
+  if (process.platform === 'win32' || process.platform === 'darwin') p = p.toLowerCase()
+  return p
+}
+
+test('B8: 前线 key 段大小写折叠（大小写不敏感 FS）——src/SRC 判同前缀', () => {
+  if (process.platform === 'win32' || process.platform === 'darwin') {
+    assert.equal(normalizeFront('SRC/api'), normalizeFront('src/api'))
+    assert.equal(frontsOverlap('SRC', 'src/api'), true)
+    assert.equal(frontsOverlap('Src', 'SRCX'), false, '折叠不破坏 slash guard 的前缀诚实')
+  } else {
+    // linux FS 大小写敏感：不折叠（与 normalizeWorkspaceKey 的平台条件同款）。
+    assert.equal(frontsOverlap('SRC', 'src/api'), false)
+  }
 })

@@ -37,3 +37,15 @@ test('UserSeenTracker：会话级记录 + presence-only 盐 + 无记录 null', (
   t.handle(undefined, null)
   assert.equal(t.seenAt('sess-a'), '2026-09-06T11:00:00Z')
 })
+
+test('对抗审查 A9: bySession 封顶 8192——超限按插入序剪最旧，最新保留', () => {
+  const t = createUserSeenTracker()
+  const msg = (at: string): unknown => ({ type: 'user/message', time: at, data: { source: { kind: 'user' } } })
+  // 灌 8293 条（超限 101）：应逐出 sess-0…sess-100，末态恰 8192 条。
+  for (let i = 0; i < 8293; i++) t.handle(`sess-${i}`, msg(`2026-09-06T1${i % 10}:00:00Z`))
+  assert.equal(t.seenAt('sess-0'), null, '最旧条目被剪')
+  assert.equal(t.seenAt('sess-100'), null, '超限 101 条全部被剪')
+  assert.notEqual(t.seenAt('sess-101'), null, '剪到恰好封顶为止')
+  assert.notEqual(t.seenAt('sess-8292'), null, '最新条目在表')
+  assert.equal(t.salt(), 'u', '盐仍 presence-only')
+})

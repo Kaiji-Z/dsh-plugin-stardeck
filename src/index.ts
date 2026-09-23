@@ -43,7 +43,7 @@ import { parseUnitReportEvent } from './report-capture.ts'
 import { weaveDemoSessions } from './demo-weave.ts'
 import { loadRoster, type Roster } from './units.ts'
 import type { CampaignState } from './types.ts'
-import { materializeInstanceWorkspace, materializeTaskWorkspace, releaseTaskWorkspace, resolveWarRoot, resolveWorkspaceRoot } from './workspace.ts'
+import { materializeInstanceWorkspace, materializeTaskWorkspace, isAutoWorkspace, releaseTaskWorkspace, resolveWarRoot, resolveWorkspaceRoot } from './workspace.ts'
 import { displayTitleOf } from './client/preflight.ts'
 
 export const name = 'warroom-plugin'
@@ -107,6 +107,9 @@ function createConscriptor(deps: {
   store: WarStore
   stateDir: string
   warRoot: string
+  /** B9：V18 auto 物化根（缺省 <warRoot 同级>/warroom-workspaces）——征召的
+   *  bound 判据（auto 任务不注入 bound 档案）。缺席按缺省推导。 */
+  workspaceRoot?: string
   maxUnits: number
   maxCommanders: number
   maxAttempts: number
@@ -146,6 +149,11 @@ function createConscriptor(deps: {
   // B1-件⑤ 死会话 rescue：resume 连续失败计数（跨巡检轮）——≥2 才判死回栏
   //（回栏烧 attempt，persistence 后端打嗝不该烧）；成功即清零。
   const rescueFailures = new Map<string, number>()
+  // B10：死会话连败隔离——重试已用尽的死会话若 resume 持续失败（历史 541 连败
+  // 同型：90s 一轮永久重试只烧日志），连续失败 ≥8 次入隔离集不再 resume，
+  // console.error 一次性告警（板上仍可见，留给舰长处置）。
+  const rescueQuarantined = new Set<string>()
+  const RESCUE_QUARANTINE_AFTER = 8
   // sd 批E：参谋侧 rescue 的连败计数与在途守卫
   const staffRescueFailures = new Map<string, number>()
   const rescuingStaff = new Set<string>()
@@ -179,7 +187,9 @@ function createConscriptor(deps: {
     }
     const title = `外勤·${displayTitleOf(task.title ?? task.intent).slice(0, 14)}`
     void relay.rename({ rpcId: rpc(), payload: { sessionId, title } }).catch(() => undefined)
-    const bound = task.workspacePath !== undefined && !task.workspacePath.startsWith(deps.warRoot)
+    // B9：bound 判据改双根守卫（旧 .warroom + V18 物化根 warroom-workspaces）——
+    // auto 物化任务不再误判 bound 而注入工作区档案。
+    const bound = task.workspacePath !== undefined && !isAutoWorkspace(task.workspacePath, deps.warRoot, deps.workspaceRoot)
     const dossier = task.workspacePath !== undefined && bound
       ? readDossier(deps.stateDir, task.workspacePath)
       : '（新星球，尚无历史档案。）'
@@ -248,6 +258,13 @@ function createConscriptor(deps: {
         return false
       }
     },
+    // B1-重派死锁修复：requeue 回栏（war_fail 重派/巡检判死回收）前显式释放
+    // spawn-once 守卫——lazy prune 只清「已离板」任务，requeue 后任务恰回
+    // published，守卫永不释放=重派永久卡死（tools.war_fail 与巡检 requeue 点
+    // 都先调这里再补征）。
+    releaseSpawned(taskId: string): void {
+      spawned.delete(taskId)
+    },
     // B1-件⑤ 孤儿 GC：任务终态（closed/failed）由 tools 侧收官/败局路径调用——
     // 清三张内存表（孤儿/spawned 守卫/拒因）并落盘，不留「已死任务」的常驻账。
     forget(taskId: string): void {
@@ -255,6 +272,7 @@ function createConscriptor(deps: {
       spawned.delete(taskId)
       lastSkip.delete(taskId)
       rescueFailures.delete(taskId)
+      rescueQuarantined.delete(taskId)
       persistOrphans()
     },
     /** B1-件② trace 视角（只读）：内存态守卫与拒因表的快照。 */
@@ -278,6 +296,8 @@ function createConscriptor(deps: {
           for (const t of tasks) {
             if (t.status !== 'in_progress' || t.claimedBy === undefined || t.quotaPaused === true) continue
             if (rescuing.has(t.campaignId)) continue
+            // B10：连败隔离集不再 resume（板上留置等舰长处置——重开会话或重新立案）。
+            if (rescueQuarantined.has(t.campaignId)) continue
             let live = false
             try {
               const agent = deps.resolveAgent(t.claimedBy)
@@ -287,6 +307,7 @@ function createConscriptor(deps: {
             }
             if (live) {
               rescueFailures.delete(t.campaignId)
+              rescueQuarantined.delete(t.campaignId) // 会话复活即解除隔离（舰长重开了会话）
               continue
             }
             rescuing.add(t.campaignId)
@@ -306,9 +327,17 @@ function createConscriptor(deps: {
               const n = (rescueFailures.get(t.campaignId) ?? 0) + 1
               rescueFailures.set(t.campaignId, n)
               const why = err instanceof Error ? err.message : String(err)
-              if (n >= 2) {
+              // B10：连败 ≥8 隔离——重试已用尽的死会话不再每 90s 永久 resume
+              //（历史 541 连败同型）；一次性 console.error 告警，任务板上留置。
+              if (n >= RESCUE_QUARANTINE_AFTER) {
+                rescueQuarantined.add(t.campaignId)
+                console.error(`[warroom] 死会话 resume 连败 ${n} 次，任务 ${t.campaignId}（会话 ${t.claimedBy}）已隔离——不再自动 resume，板上留置，请舰长处置（重开会话或让大副重新立案）。`)
+              } else if (n >= 2) {
                 if (t.attempts < deps.maxAttempts) {
                   appendEvent(deps.stateDir, { type: 'task_requeued', ts: new Date().toISOString(), campaignId: t.campaignId, reason: `执行会话失联·巡检回收（resume 连败 ${n} 次：${why.slice(0, 120)}）` })
+                  // B1-重派死锁修复：判死回栏先释放 spawn-once 守卫（lazy prune
+                  // 清不掉回 published 的任务）——下一轮巡检补征段即可接手。
+                  spawned.delete(t.campaignId)
                   console.log(`[warroom] 死会话判死：任务 ${t.campaignId} 回栏重征（resume 连败 ${n} 次）`)
                 } else {
                   noteSkip(t.campaignId, `执行会话失联且重试已用尽（resume 连败 ${n} 次：${why.slice(0, 120)}）——留置等舰长处置`)
@@ -370,7 +399,10 @@ function createConscriptor(deps: {
         // ── 补征段（原有）───────────────────────────────────────────────
         const inflight = tasks.filter(t => t.status === 'in_progress').length
         if (inflight >= deps.maxCommanders) return
-        const plan = conscriptPlan(tasks.map(t => ({ taskId: t.campaignId, status: t.status, workspacePath: t.workspacePath, priority: t.priority, startedAt: t.startedAt })))
+        // B2：计划滤 deps（statusOf 给出时）——dep-locked 任务不被提前征召
+        //（claim 被拒空转、简报只发一次）也不遮蔽同工作区可跑任务。
+        const statusOf = (id: string) => tasks.find(t => t.campaignId === id)?.status
+        const plan = conscriptPlan(tasks.map(t => ({ taskId: t.campaignId, status: t.status, workspacePath: t.workspacePath, priority: t.priority, startedAt: t.startedAt, deps: t.deps })), statusOf)
         const waiting = plan.filter(t => !spawned.has(t.taskId))
         if (waiting.length === 0) return
         // v3: the patrol conscripts DIRECTLY (no staff LLM round-trip) — the
@@ -462,6 +494,7 @@ export function apply(ctx: Context, config: Config): void {
     store,
     stateDir,
     warRoot,
+    workspaceRoot,
     maxUnits: config.maxUnits,
     maxCommanders: config.maxCommanders,
     maxAttempts: config.maxAttempts,
@@ -495,6 +528,7 @@ export function apply(ctx: Context, config: Config): void {
       materializeInstance: (_warRoot, taskId, slug) => materializeInstanceWorkspace(workspaceRoot, taskId, slug),
     },
     warRoot,
+    workspaceRoot,
     // 开发期默认全开（DEFAULT_ON + env/extraFeatures 覆盖）。staff-auto-close
     // 默认 OFF——舰长令 2026-09-01：所有回报强制人工验收，见 flags.ts 政策注。
     flags: runtimeFlags(process.env, config.extraFeatures),
@@ -1012,7 +1046,7 @@ export function apply(ctx: Context, config: Config): void {
       // V17 归档扇出：逐会话调宿主 workspaces.archiveSession（不可逆——宿主
       // 无恢复 RPC，dashboard 侧已有链全终局闸）。宿主 RPC 层冷启动有长扫描窗
       // （演示板首分钟内 registry/list 操作可达数十秒）——必须加界但不误伤：
-      // 60s 超时按该会话失败记账（不假装成、也不无限挂起）。
+      // 90s 超时按该会话失败记账（不假装成、也不无限挂起）。
       archiveSession: async sessionId => {
         const workspace = workspaceRef.face
         if (workspace === undefined) return { ok: false, code: 'E_NO_FACE', message: '宿主工作区通道未接入' }

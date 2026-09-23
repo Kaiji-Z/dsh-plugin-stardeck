@@ -6,8 +6,8 @@
  * @module dsh-plugin-stardeck/planets
  */
 
-import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { appendJsonl } from './jsonl.ts'
 import { readJsonlCached } from './fold-cache.ts'
 
 export interface PlanetRecord {
@@ -24,7 +24,10 @@ const fileOf = (dir: string): string => join(dir, 'planets.jsonl')
 export function registerPlanet(dir: string, path: string, title: string | null = null, ts = new Date().toISOString()): PlanetRecord[] {
   const cur = loadPlanets(dir)
   if (cur.some(p => p.path === path)) return cur
-  appendFileSync(fileOf(dir), `${JSON.stringify({ type: 'planet_registered', ts, path, title: title ?? undefined })}\n`, 'utf8')
+  // C8（对抗审查 2026-09-23）：追加改走 appendJsonl——其内部 mkdirSync 建目录
+  // （其余三路账本 append 都建目录，唯独这路旧 appendFileSync 在全新装首请求
+  // POST /planets 时因 stateDir 缺席 ENOENT 500）；顺带获得断尾自愈。
+  appendJsonl(fileOf(dir), { type: 'planet_registered', ts, path, title: title ?? undefined })
   return [...cur, { path, title, registeredAt: ts }]
 }
 

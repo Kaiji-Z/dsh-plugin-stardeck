@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { appendEvent, foldCampaign, isActiveUnit, listCampaignIds, loadCampaign, readEvents } from '../src/events.ts'
+import { appendEvent, foldCampaign, isActiveUnit, isPassVerdict, listCampaignIds, loadCampaign, readEvents } from '../src/events.ts'
 
 function tmpStateDir(): string {
   return mkdtempSync(join(tmpdir(), 'warroom-test-'))
@@ -233,4 +233,40 @@ test('v2.0: v0.2 legacy claims (no token) still get session cards', () => {
   assert.equal(legacy.attemptLog.length, 1)
   assert.equal(legacy.attemptLog[0]!.sessionId, 'old-cmd')
   assert.equal(legacy.attemptLog[0]!.id, '')
+})
+
+// ── 对抗审查 2026-09-23：verdict 判定去子串化 ──────────────────────────────
+test('isPassVerdict: 否定式/搭边词不认，认可形态需词头+句读边界', () => {
+  // 旧 bug：includes('通过') 把「打回：验收未通过」记成 succeeded 胜局。
+  assert.equal(isPassVerdict('打回：验收未通过，缺登录页'), false)
+  assert.equal(isPassVerdict('未通过'), false)
+  assert.equal(isPassVerdict('不通过'), false)
+  assert.equal(isPassVerdict('通过性测试没做完，打回'), false)
+  assert.equal(isPassVerdict('作废：跑错仓库了'), false)
+  assert.equal(isPassVerdict('通过'), true)
+  assert.equal(isPassVerdict('通过收官'), true)
+  assert.equal(isPassVerdict('通过收官，做得好'), true)
+  assert.equal(isPassVerdict('判定：通过'), true)
+  assert.equal(isPassVerdict('验收：通过'), true)
+  assert.equal(isPassVerdict('合格'), true)
+  assert.equal(isPassVerdict('验收合格'), true)
+  assert.equal(isPassVerdict('验收通过，收官'), true)
+  assert.equal(isPassVerdict('通过（证据齐全）'), true)
+})
+
+test('fold: 打回含「未通过」字样的 verdict 不再把尝试折成 succeeded', () => {
+  const dir = tmpStateDir()
+  try {
+    appendEvent(dir, { type: 'campaign_started', ts: 't1', campaignId: 'n1' } as never)
+    appendEvent(dir, { type: 'task_published', ts: 't2', campaignId: 'n1' } as never)
+    appendEvent(dir, { type: 'task_claimed', ts: 't3', campaignId: 'n1', attemptId: 'a1', by: 's1' } as never)
+    appendEvent(dir, { type: 'task_reported', ts: 't4', campaignId: 'n1', attemptId: 'a1', summary: '完成' } as never)
+    appendEvent(dir, { type: 'task_closed', ts: 't5', campaignId: 'n1', verdict: '打回：验收未通过，缺登录页' } as never)
+    const state = loadCampaign(dir, 'n1')
+    assert.equal(state.status, 'closed')
+    const att = state.attemptLog.find(a => a.attemptId === 'a1')
+    assert.equal(att?.outcome, undefined, '未通过的打回不得折成 succeeded')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

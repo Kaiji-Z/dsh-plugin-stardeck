@@ -8,8 +8,8 @@
  * @module dsh-plugin-stardeck/threads
  */
 
-import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { appendJsonl } from './jsonl.ts'
 import { readJsonlCached } from './fold-cache.ts'
 
 /** One externally-attached thread, folded from the log. */
@@ -29,10 +29,10 @@ function threadsFile(stateDir: string): string {
   return join(stateDir, 'threads.jsonl')
 }
 
-/** Append one event as a JSON line to the attach log. */
+/** Append one event as a JSON line to the attach log.
+ * 对抗审查 2026-09-23：经 appendJsonl（尾部半行先治愈再追加——崩断粘连不再吞事件）。 */
 export function appendThreadEvent(stateDir: string, event: ThreadEvent): void {
-  mkdirSync(stateDir, { recursive: true })
-  appendFileSync(threadsFile(stateDir), `${JSON.stringify(event)}\n`, 'utf8')
+  appendJsonl(threadsFile(stateDir), event)
 }
 
 /** Read and parse the attach log; malformed lines are skipped, not fatal.

@@ -8,8 +8,8 @@
  * @module dsh-plugin-stardeck/directives
  */
 
-import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { appendJsonl, appendJsonlBatch } from './jsonl.ts'
 import { readJsonlCached } from './fold-cache.ts'
 import { nextRunOf } from './schedule.ts'
 import type { TaskStatus } from './types.ts'
@@ -110,10 +110,16 @@ function directivesFile(stateDir: string): string {
   return join(stateDir, 'directives.jsonl')
 }
 
-/** Append one event as a JSON line to the shared directive log. */
+/** Append one event as a JSON line to the shared directive log.
+ * 对抗审查 2026-09-23：经 appendJsonl（尾部半行先治愈再追加——崩断粘连不再吞事件）。 */
 export function appendDirectiveEvent(stateDir: string, event: DirectiveEvent): void {
-  mkdirSync(stateDir, { recursive: true })
-  appendFileSync(directivesFile(stateDir), `${JSON.stringify(event)}\n`, 'utf8')
+  appendJsonl(directivesFile(stateDir), event)
+}
+
+/** 批量追加（一次 write）：调用点需要「多枚事件要么一起可见、要么一起不可见」的
+ * 写级原子性（如 pivot 的 received→approved 连写）。顺序即落账顺序。 */
+export function appendDirectiveEventBatch(stateDir: string, events: ReadonlyArray<DirectiveEvent>): void {
+  appendJsonlBatch(directivesFile(stateDir), events)
 }
 
 /** Read and parse the directive log; malformed lines are skipped, not fatal.
@@ -341,6 +347,9 @@ export function pendingDirectives(directives: ReadonlyArray<Directive>): Directi
 export function dueScheduledDirectives(directives: ReadonlyArray<Directive>, nowMs: number): string[] {
   const out: string[] = []
   for (const d of directives) {
+    // 对抗审查 2026-09-23：只发 draft——已取消的定时令若不拦，每 30s 被重判到期、
+    // 追加被终态守卫吞掉的 directive_dispatched，账本白涨废事件行。
+    if (d.status !== 'draft') continue
     if (d.schedule === undefined || d.schedule.dispatchedAt !== undefined) continue
     const anchor = Date.parse(d.createdAt)
     if (!Number.isFinite(anchor)) continue
@@ -355,9 +364,10 @@ export function dueScheduledDirectives(directives: ReadonlyArray<Directive>, now
 }
 
 /** New directive ids: time-ordered, filesystem-safe, visually distinct from
- * task ids (`cmd-` prefix — the two must never be confusable on a card). */
+ * task ids (`cmd-` prefix — the two must never be confusable on a card).
+ * 对抗审查 2026-09-23：随机后缀 4→8 hex——同秒多令的碰撞概率再降四个数量级。 */
 export function newDirectiveId(now: Date = new Date()): string {
   const pad = (n: number, w = 2): string => String(n).padStart(w, '0')
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  return `cmd-${stamp}-${crypto.randomUUID().slice(0, 4)}`
+  return `cmd-${stamp}-${crypto.randomUUID().slice(0, 8)}`
 }

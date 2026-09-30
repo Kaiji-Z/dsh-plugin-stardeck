@@ -14,7 +14,7 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 - 验收证据（测试数 / shooter / 探针）随条目附注，是本项目的交付纪律。
 - **发版门**：平时交付只在 `[Unreleased]` 积条目，版本号（package.json 与版本头）保持不动；明说「发版」时才落版本头、推进版本号。
 
-## [Unreleased]
+## [0.20.6] - 2026-09-30
 
 ### Changed
 - **宿主升级适配 dsh 0.2.0-rc.2（2026-09-30，插件源码零改动）**：宿主 checkout 从 0.1.5-sync（c291e7961a）推进到 0.2.0-rc.2（639ed01539=dsh-v0.2.0-rc.2），静态审计+实弹全链双证 M1/M2 适配面无损跨越——agents.create/resume（CreateAgentOptions 含 agentPreset/setup 全兼容）、followup（原样入 inbox 不校验，rpcId 自滤存活）、workspaceRegistry/sessionQuery/sessionTitle/goals/commands（definitionId 仍可选）/skills/agentDefaultModel/webServer（exact/prefix 路由）/systemPrompt.section 全在场；cordis 4.0.2→4.0.4 补丁跳；client 扫描器 dsh 字段契约不变；v5-spike 探针与 0.1.5 基线逐项一致（planMode 仍 inject-not-satisfied，war_plan 自建计划卡维持正解）。实弹判据（forensic 隔离态 :3099）：POST /commands → fuse 15s → 大参会话铸造 → 大副真诊发布 → 外勤征召（子代理）→ war_claim 令牌 → write + **pwsh 沙箱命令×2** → war_submit 证据回报（Test-Path/Get-Content 逐项 checks）→ 任务 reported；`pnpm verify` PASS（365/365）。两处环境级修复随轮落地（详见 AGENTS 坑录）：①profile llm 路由迁 `llm-pi-ai` 手声明路由（上游把 llm-deepseek 综合条目拆成 -api-key/-account，旧 patch name 失配→z.ai 路由+Z_AI_API_KEY 静默丢失，且 api-key 变体改发 x-api-key 头而 z.ai 只认 Bearer）；②本机用户树 ACL 只给 M 无 WRITE_OWNER，0.2.0 沙箱 grantWrite 写 Low 完整性标签必 Win32 5 → 子进程命令全灭——给 vibecodingKJ/AppData Temp/.dsh 三根补 `kaiji:(OI)(CI)F`。新增 `scripts/probe-host-020.mjs`（三端点+token 探针）与 `scripts/repro-acl-grant.mjs`（沙箱授权最小复现，独立于宿主可跑）；.gitignore 补 `.forensic-state/`。挂账续期：/warroom 前缀绕过宿主 token 鉴权在 0.2.0 仍未收口（上游根因）。

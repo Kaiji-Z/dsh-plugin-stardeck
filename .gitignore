@@ -30,3 +30,7 @@ __pycache__/
 .goal/
 .impeccable/
 shots-v182/
+
+# ---- 本机 agent 工具缓存标记（zcode 插件/视频代理，非仓内容；发版净树门 0 须忽略）----
+.v2c/
+.video_agent/

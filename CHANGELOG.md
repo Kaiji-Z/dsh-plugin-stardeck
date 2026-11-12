@@ -14,6 +14,12 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 - 验收证据（测试数 / shooter / 探针）随条目附注，是本项目的交付纪律。
 - **发版门**：平时交付只在 `[Unreleased]` 积条目，版本号（package.json 与版本头）保持不动；明说「发版」时才落版本头、推进版本号。
 
+## [Unreleased]
+
+### Fixed
+
+- **sd 审计回流批（回流自 stardeck 0.9.1 全仓审计轮 dcda5ad，2026-11-12）**：stardeck 五路审查在共享内核抓出的 6 处同病逐项核实回流（跨仓核对结论：术语统一/D39 进水口·Watchdog/D40-D41 验收面/D31-38 聊天线均不对齐——前者本仓已是正典，余为 stardeck 专属形态或新特性，守护态政策默认不回流）。**P1×2**：①`war_publish_chain` 绑定既有工作区必抛 ReferenceError（块内 `const abs` 被循环内三元式引用——绑定路径 100% 崩、每次重试留孤儿任务账；实弹未走到才潜伏至今）→ boundAbs 提块外，顺带每环 created+published 拼单次 write（appendJsonlBatch 写级原子，崩溃不产生半截链）+ registerPlanet 出循环（链级一次）；②星域 mount-only effect 首帧闭包吃掉 SSE 新板数据（五个回调 onOpenCommand/onPlanetClick/onPlanetHover/onVoidClick/onHqClick 被首帧闭包捕获——SSE 推新板后点星球/战线仍用旧快照判，新命令点击无反应；V18.3 只修了 focusWsRef 一个值）→ handlersRef 全组收编（数据面 effect 随板翻新）。**P2×4**：③composer 星球选择器泄漏 `__war_ungrouped__` 伪键进【星球：…】协议标记（合成沙盒聚合键不是工作区路径，大副侧会当路径用）→ 选项滤除；④2D 战术盘战线环恒浅色档（WarzoneTactical.draw 引用不存在的 `this.isDarkTheme`——getter 只在 WarzoneScene，恒 undefined=falsy）→ `this.dark`；⑤WarzoneScene.dispose 漏收 GPU 资源（m 键切视图/翻页整景卸载时 planets/squads 材质几何不释放）→ traverse seen-set 释放 + 高亮轨迹清场（hlWs 先清防 rebuild 再添新线）；⑥三处硬编码中文入典（EN 皮肤下显示中文）：starfield 星球驻军读数 `活跃N 待发N 败N`→planetStats 键、执行卡 aria 尾注「点击查看源命令」→xcardClickHint 键、编队缺省名「执行编队/第N突击编队」→sqTag 接线（键早在典没接）+sqFallbackName 新键；copy-en.ts 同步补齐（copy-lang 键形锁过）。验证：`pnpm verify` PASS 366/366（+1 回归钉：bound 成链落指定路径+workspaceKind=bound+星球注册链级一次，stardeck 原钉适配本仓返回形状）。
+
 ## [0.20.6] - 2026-09-30
 
 ### Changed

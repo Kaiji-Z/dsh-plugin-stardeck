@@ -306,7 +306,7 @@ export function StarfieldMap(props: StarfieldProps): ReactNode {
       }, `${labelOf(spec.wsPath)}${garrison.triumphs > 0 ? ` ✓${garrison.triumphs}` : ''}`),
       garrison.orbs.length + garrison.awaiting + garrison.failing > 0
         ? createElement('span', { className: `war-planet-stats${garrison.awaiting > 0 ? ' wait' : ''}${garrison.failing > 0 ? ' fail' : ''}` },
-            `${garrison.orbs.length > 0 ? `活跃${garrison.orbs.length}` : ''}${garrison.awaiting > 0 ? ` 待发${garrison.awaiting}` : ''}${garrison.failing > 0 ? ` 败${garrison.failing}` : ''}`.trim())
+            activeCopy().starfield.planetStats(garrison.orbs.length, garrison.awaiting, garrison.failing))
         : null,
       )),
     ...troops.map(t =>

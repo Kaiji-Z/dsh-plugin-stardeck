@@ -1446,25 +1446,33 @@ export function warTools(deps: WarToolsDeps) {
       const ids = specs.map(() => newCampaignId())
       const binding = parseWorkspaceArg(args.workspace)
       let ws: { path: string; kind: 'worktree' | 'dir'; note?: string }
+      let boundAbs: string | undefined
       if (binding.kind === 'instance') {
         ws = deps.workspace.materializeInstance(deps.warRoot, ids[0]!, binding.slug)
       } else if (binding.kind === 'bound') {
         const abs = resolve(binding.path)
         if (!existsSync(abs)) throw new Error(`工作区不存在：${abs}。请与舰长核对路径，或改用 @new:<名字> 新开副本。`)
+        boundAbs = abs
         ws = { path: abs, kind: 'dir', note: '绑定既有工作区（链内同区顺序接力）' }
       } else {
         ws = deps.workspace.materialize(deps.warRoot, ids[0]!, '')
       }
       // 逐环落任务：task i deps [task i-1]（顺序链），全部共用链级工作区。
+      // B6 同款写级原子：每环 created+published 拼单次 write（appendJsonlBatch）
+      // ——崩溃时整环可见或整环不可见，重试不产生半截链；boundAbs 提到块外
+      // （旧代码在三元式里引用块内 abs——bound 路径必抛 ReferenceError，实弹未
+      // 走到才潜伏至今）。
       for (let i = 0; i < specs.length; i++) {
         const spec = specs[i]!
-        appendEvent(deps.stateDir, {
-          type: 'task_created', ts: new Date().toISOString(), campaignId: ids[i]!, title: spec.title, brief: spec.brief, acceptance: spec.acceptance, priority: 'normal', publishedBy: staff.id,
-          ...(i > 0 ? { deps: [ids[i - 1]!] } : {}),
-        })
-        appendEvent(deps.stateDir, { type: 'task_published', ts: new Date().toISOString(), campaignId: ids[i]!, workspacePath: ws.path, publishedBy: staff.id, workspaceKind: composeWorkspaceKind(binding.kind, ws, binding.kind === 'bound' ? abs : undefined) })
-      registerPlanet(deps.stateDir, ws.path)
+        appendJsonlBatch(join(ensureCampaignsDir(deps.stateDir), `${ids[i]}.jsonl`), [
+          {
+            type: 'task_created', ts: new Date().toISOString(), campaignId: ids[i]!, title: spec.title, brief: spec.brief, acceptance: spec.acceptance, priority: 'normal', publishedBy: staff.id,
+            ...(i > 0 ? { deps: [ids[i - 1]!] } : {}),
+          },
+          { type: 'task_published', ts: new Date().toISOString(), campaignId: ids[i]!, workspacePath: ws.path, publishedBy: staff.id, workspaceKind: composeWorkspaceKind(binding.kind, ws, boundAbs) },
+        ])
       }
+      registerPlanet(deps.stateDir, ws.path)
       // 命令卡链接链头（approved）；链尾收官即整条命令完成。
       appendDirectiveEvent(deps.stateDir, { type: 'directive_approved', ts: new Date().toISOString(), directiveId: directive.id, taskId: ids[0]! })
       const war = deps.store.get()

@@ -62,6 +62,8 @@ export interface WarCopy {
     hqPickerRegGroup: (n: number) => string
     hqPickerDoneGroup: (n: number) => string
     xcardPrefix: string
+    /** 执行卡 aria 尾注（读屏用户听得见的「点击查看源命令」）——sd 审计回流入典。 */
+    xcardClickHint: string
     footStat: (squads: number, planets: number, fronts: number) => string
     kbGroupAria: string
     logOrder: string
@@ -69,6 +71,8 @@ export interface WarCopy {
     logRetreat: string
     logReview: string
     garrisonTitle: (active: number, awaiting: number, triumphs: number, failing: number) => string
+    /** 星球名签下的驻军读数（活跃/待发/败）——sd 审计回流入典（原硬编码中文）。 */
+    planetStats: (active: number, awaiting: number, failing: number) => string
     garrisonAria: (label: string, active: number, awaiting: number, triumphs: number, failing: number) => string
     /** V18.2 悬停卡瘦身（舰长令：名字/路径/状态给最精简读数）+ 全词面入典：
      * 星球态/编队相位/战线/HQ 行——军事源串为单一源，trek 词表运行时派生。 */
@@ -79,6 +83,8 @@ export interface WarCopy {
     failSuffix: (n: number) => string
     tacGarrison: (n: number) => string
     sqTag: string
+    /** demo 编队缺省名（无 sourceLabel/verb 时）——序号编队名入典。 */
+    sqFallbackName: (id: number) => string
     targetLabel: string
     phaseLabel: string
     returnHq: string
@@ -768,6 +774,7 @@ export const warCopy: WarCopy = {
     hqPickerRegGroup: n => `可注册（${n}）`,
     hqPickerDoneGroup: n => `已在战区（${n}）`,
     xcardPrefix: '作战中：',
+    xcardClickHint: '，点击查看源命令',
     footStat: (sq, pl, fr) => `${sq} 队在外 · ${pl} 战场 · ${fr} 战线`,
     kbGroupAria: '战场清单（键盘直达战线面板）',
     logOrder: '下令',
@@ -775,6 +782,7 @@ export const warCopy: WarCopy = {
     logRetreat: '败退',
     logReview: '战报待验收',
     garrisonTitle: (ac, aw, tr, fa) => `活跃 ${ac} · 待发 ${aw} · 凯旋 ${tr} · 折戟 ${fa}`,
+    planetStats: (ac, aw, fa) => [ac > 0 ? `活跃 ${ac}` : '', aw > 0 ? `待发 ${aw}` : '', fa > 0 ? `败 ${fa}` : ''].filter(s => s !== '').join(' '),
     garrisonAria: (lb, ac, aw, tr, fa) => `战场 ${lb}：活跃 ${ac}、待发 ${aw}、凯旋 ${tr}、折戟 ${fa}——跳最近的源命令`,
     stPlanetActive: '作战中',
     stPlanetSettled: '已收官',
@@ -783,6 +791,7 @@ export const warCopy: WarCopy = {
     failSuffix: n => ` ·${n}折戟`,
     tacGarrison: n => `凯旋 ${n}`,
     sqTag: '执行编队',
+    sqFallbackName: id => `第 ${id} 突击编队`,
     targetLabel: '目标战场',
     phaseLabel: '行动',
     returnHq: '返航 → 总部',
@@ -1271,6 +1280,7 @@ export const plainCopy: WarCopy = {
     hqPickerRegGroup: n => `可登记（${n}）`,
     hqPickerDoneGroup: n => `已在看板（${n}）`,
     xcardPrefix: '进行中：',
+    xcardClickHint: '，点击查看源任务',
     footStat: (sq, pl, fr) => `${sq} 个进行中 · ${pl} 个项目 · ${fr} 条线`,
     kbGroupAria: '项目清单（键盘直达事项线面板）',
     logOrder: '新建',
@@ -1278,6 +1288,7 @@ export const plainCopy: WarCopy = {
     logRetreat: '失败',
     logReview: '待验收',
     garrisonTitle: (ac, aw, tr, fa) => `进行中 ${ac} · 待执行 ${aw} · 完成 ${tr} · 失败 ${fa}`,
+    planetStats: (ac, aw, fa) => [ac > 0 ? `进行中 ${ac}` : '', aw > 0 ? `待执行 ${aw}` : '', fa > 0 ? `失败 ${fa}` : ''].filter(s => s !== '').join(' · '),
     garrisonAria: (lb, ac, aw, tr, fa) => `项目 ${lb}：进行中 ${ac}、待执行 ${aw}、完成 ${tr}、失败 ${fa}——跳最近的源命令`,
     stPlanetActive: '进行中',
     stPlanetSettled: '已完成',
@@ -1286,6 +1297,7 @@ export const plainCopy: WarCopy = {
     failSuffix: n => ` ·${n}失败`,
     tacGarrison: n => `完成 ${n}`,
     sqTag: '干员',
+    sqFallbackName: id => `任务组 ${id}`,
     targetLabel: '目标项目',
     phaseLabel: '近况',
     returnHq: '返回 → HQ',

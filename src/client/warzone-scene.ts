@@ -1476,7 +1476,7 @@ export class WarzoneScene {
     this.pickables.push(proxy)
     const s: WzSquad = {
       kind: 'squad', id, sessionId: null, code: 'SQ-' + pad2(id),
-      cname: info !== undefined ? (info.sourceLabel ?? info.verb ?? `执行编队`) : `第${id}突击编队`,
+      cname: info !== undefined ? (info.sourceLabel ?? info.verb ?? activeCopy().starfield.sqTag) : activeCopy().starfield.sqFallbackName(id),
       group, proxy, glowMat, ships: n, target, phase,
       boardPhase: info?.boardPhase ?? 'deployed',
       verb: info?.verb ?? null, paused: info?.paused ?? false, sourceLabel: info?.sourceLabel ?? null,
@@ -2305,7 +2305,32 @@ export class WarzoneScene {
 
   dispose(): void {
     for (const d of this.disposables) d.dispose()
+    // sd 审计回流：星球/编队网格的材质与几何同步 Board 重建路径同款 traverse 释放
+    //（缓存贴图是模块级 texCache——material.dispose 不动 texture，SSE 重建零重画
+    // 的根基不受影响）；整景卸载（m 键切视图/翻页）不再漏收 GPU 资源。
+    const seen = new Set<THREE.Material | THREE.BufferGeometry>()
+    for (const p of this.planets) {
+      this.scene.remove(p.mesh)
+      p.mesh.traverse(node => {
+        const m = (node as THREE.Mesh).material as THREE.Material | undefined
+        const g = (node as THREE.Mesh).geometry as THREE.BufferGeometry | undefined
+        if (m !== undefined && !seen.has(m)) { seen.add(m); m.dispose() }
+        if (g !== undefined && !seen.has(g)) { seen.add(g); g.dispose() }
+      })
+    }
+    for (const s of this.squads) {
+      this.scene.remove(s.group)
+      s.group.traverse(node => {
+        const m = (node as THREE.Mesh).material as THREE.Material | undefined
+        const g = (node as THREE.Mesh).geometry as THREE.BufferGeometry | undefined
+        if (m !== undefined && !seen.has(m)) { seen.add(m); m.dispose() }
+        if (g !== undefined && !seen.has(g)) { seen.add(g); g.dispose() }
+      })
+      s.glowMat.dispose()
+    }
     this.rebuildFrontLines([]) // V13：航迹层材质/几何随清场释放
+    this.hlWs.clear() // 先清高亮集——rebuildHlLines 只释放不重建（sd 原样调用在 hlWs 非空时会往将拆场景再添新线）
+    this.rebuildHlLines() // 高亮轨迹同法清场
     this.composer.dispose()
     this.renderer.dispose()
   }
@@ -2508,8 +2533,10 @@ export class WarzoneTactical {
       const fn = frontN.get(p.wsPath) ?? 0
       if (fn > 0) {
         const hue = (((pi + 1) * 0.61803398875) % 1) * 360
-        const sat = this.isDarkTheme ? 72 : 62
-        const li = this.isDarkTheme ? 55 : 38
+        // sd 审计回流：本类只有 this.dark（isDarkTheme getter 在 WarzoneScene）——
+        // 旧引用恒 undefined=falsy，2D 战线环恒浅色档。
+        const sat = this.dark ? 72 : 62
+        const li = this.dark ? 55 : 38
         const seg = (Math.PI * 2) / fn, gap = 0.35
         g.strokeStyle = `hsl(${hue.toFixed(0)}, ${sat}%, ${li}%)`
         g.lineWidth = 2

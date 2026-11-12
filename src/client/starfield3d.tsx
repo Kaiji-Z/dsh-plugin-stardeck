@@ -106,7 +106,7 @@ export interface WarzoneProps {
 }
 
 export function Warzone(props: WarzoneProps): ReactNode {
-  const { ariaLabel, active, planets, squads, log, fronts, highlightWs, onOpenCommand, onPlanetHover, onPlanetClick, onVoidClick, onHqClick, orbIdleLabel, onUnavailable, focusWs } = props
+  const { ariaLabel, active, planets, squads, log, fronts, highlightWs, orbIdleLabel, onUnavailable, focusWs } = props
   const rootRef = useRef<HTMLDivElement | null>(null)
   const c3dRef = useRef<HTMLCanvasElement | null>(null)
   const c2dRef = useRef<HTMLCanvasElement | null>(null)
@@ -121,6 +121,11 @@ export function Warzone(props: WarzoneProps): ReactNode {
   // V18.3 聚焦态总控：钉住星球 ws + 战线清单走 ref（帧环读，不重挂 effect）。
   const focusWsRef = useRef(focusWs)
   const frontsRef = useRef(fronts)
+  // 回调 props 同法走 ref：effect 只挂一次（监听器/帧环是首帧闭包），五个回调
+  // 若被帧环直接捕获，SSE 推新板后点/悬星球仍用旧快照判（cmdIdForWs 对新命
+  // 令恒 null=点击无反应）——V18.3 只用 focusWsRef 修了聚焦值一个口，这里把
+  // 整组回调收编（sd 审计回流收口）。
+  const handlersRef = useRef({ onOpenCommand: props.onOpenCommand, onPlanetHover: props.onPlanetHover, onPlanetClick: props.onPlanetClick, onVoidClick: props.onVoidClick, onHqClick: props.onHqClick })
   /** V11.5g：2D 态执行卡拖放偏移（sessionId→dx/dy，相对安全区锚位；会话级内存不落盘）。 */
   const cardOffRef = useRef(new Map<string, { dx: number; dy: number }>())
   const [failed, setFailed] = useState(false)
@@ -237,27 +242,27 @@ export function Warzone(props: WarzoneProps): ReactNode {
       const focusLocked = focusWsRef.current
       if (mode === 'cmd') {
         const best = pickAt(e.clientX - rect.left, e.clientY - rect.top)
-        if (best !== null && best.kind === 'hq') { onHqClick?.(); return }
+        if (best !== null && best.kind === 'hq') { handlersRef.current.onHqClick?.(); return }
         // V18.3：点星球=粘性聚焦（悬停卡钉住并内嵌战线清单）——bfpanel 弹窗退役。
         if (best !== null && best.kind === 'planet') {
           const ws = (best as WzPlanet).wsPath
           if (focusLocked !== null && ws !== focusLocked) return
-          onPlanetClick?.(ws)
+          handlersRef.current.onPlanetClick?.(ws)
           return
         }
-        onVoidClick?.()
+        handlersRef.current.onVoidClick?.()
         return
       }
       const hit = scene.pick((e.clientX - rect.left) / Math.max(rect.width, 1) * 2 - 1, -((e.clientY - rect.top) / Math.max(rect.height, 1)) * 2 + 1)
-      if (hit !== null && hit.kind === 'hq') { onHqClick?.(); return }
-      if (hit !== null && hit.kind === 'front') { onOpenCommand?.((hit as WzFrontNode).rootCommandId); return }
+      if (hit !== null && hit.kind === 'hq') { handlersRef.current.onHqClick?.(); return }
+      if (hit !== null && hit.kind === 'front') { handlersRef.current.onOpenCommand?.((hit as WzFrontNode).rootCommandId); return }
       if (hit !== null && hit.kind === 'planet') {
         const ws = (hit as WzPlanet).wsPath
         if (focusLocked !== null && ws !== focusLocked) return
-        onPlanetClick?.(ws)
+        handlersRef.current.onPlanetClick?.(ws)
         return
       }
-      onVoidClick?.()
+      handlersRef.current.onVoidClick?.()
     }
     const rect = { get left() { return root.getBoundingClientRect().left }, get top() { return root.getBoundingClientRect().top }, get width() { return root.clientWidth }, get height() { return root.clientHeight } }
     const onMouseDownCam = (e: MouseEvent): void => { if (e.button === 1) e.preventDefault() }
@@ -314,7 +319,7 @@ export function Warzone(props: WarzoneProps): ReactNode {
     const onTipClick = (e: MouseEvent): void => {
       e.stopPropagation()
       const row = (e.target as HTMLElement).closest('[data-wz-front]')
-      if (row !== null) onOpenCommand?.(row.getAttribute('data-wz-front') ?? '')
+      if (row !== null) handlersRef.current.onOpenCommand?.(row.getAttribute('data-wz-front') ?? '')
     }
     tipEl?.addEventListener('click', onTipClick)
     root.addEventListener('mousemove', onMove)
@@ -373,7 +378,7 @@ export function Warzone(props: WarzoneProps): ReactNode {
       const planetWs = hovered !== null && hovered.kind === 'planet' ? (hovered as WzPlanet).wsPath : null
       if (planetWs !== hoverPlanetWs) {
         hoverPlanetWs = planetWs
-        onPlanetHover?.(planetWs)
+        handlersRef.current.onPlanetHover?.(planetWs)
       }
       // V11.5c：围合中央自由区（灵动岛/任务舱/任务回报舱/命令坞之外）——雷达画进它，
       // V11.5f 起执行卡/名签钳进它（星球投影可能落在坞/舱底下，卡必须可达可点）；
@@ -616,8 +621,9 @@ export function Warzone(props: WarzoneProps): ReactNode {
     hlWsRef.current = highlightWs
     focusWsRef.current = focusWs
     frontsRef.current = fronts
+    handlersRef.current = { onOpenCommand: props.onOpenCommand, onPlanetHover: props.onPlanetHover, onPlanetClick: props.onPlanetClick, onVoidClick: props.onVoidClick, onHqClick: props.onHqClick }
     sceneRef.current?.syncBoard({ active, planets, squads, log, fronts })
-  }, [active, planets, squads, log, fronts, highlightWs, focusWs])
+  }, [active, planets, squads, log, fronts, highlightWs, focusWs, props.onOpenCommand, props.onPlanetHover, props.onPlanetClick, props.onVoidClick, props.onHqClick])
 
   if (failed) return null
   return createElement('div', {
@@ -638,12 +644,12 @@ export function Warzone(props: WarzoneProps): ReactNode {
       ...squads.filter(s => s.live).map(s => createElement('button', {
         key: s.sessionId, type: 'button', className: 'war-wz-xcard', 'data-wz-sid': s.sessionId,
         title: `${s.wsPath} · ${s.verb ?? orbIdleLabel}`,
-        'aria-label': `${activeCopy().starfield.xcardPrefix}${s.verb ?? orbIdleLabel}${s.sourceLabel !== null ? `（${s.sourceLabel}）` : ''}，点击查看源命令`,
+        'aria-label': `${activeCopy().starfield.xcardPrefix}${s.verb ?? orbIdleLabel}${s.sourceLabel !== null ? `（${s.sourceLabel}）` : ''}${activeCopy().starfield.xcardClickHint}`,
         onMouseEnter: () => { hoverWsRef.current = s.wsPath },
         onMouseLeave: () => { hoverWsRef.current = null },
         onFocus: () => { hoverWsRef.current = s.wsPath },
         onBlur: () => { hoverWsRef.current = null },
-        onClick: () => { if (s.sourceCommandId !== null) onOpenCommand?.(s.sourceCommandId) },
+        onClick: () => { if (s.sourceCommandId !== null) props.onOpenCommand?.(s.sourceCommandId) },
       },
         createElement('span', { className: 'war-wz-xdot' }),
         createElement('span', { className: 'war-wz-xverb' }, s.verb ?? orbIdleLabel),
@@ -685,7 +691,7 @@ export function Warzone(props: WarzoneProps): ReactNode {
         return createElement('button', {
           key: pl.wsPath, type: 'button', className: 'war-wz-kbplanet',
           'data-wz-kb-ws': pl.wsPath,
-          onClick: () => { onPlanetClick?.(pl.wsPath) },
+          onClick: () => { props.onPlanetClick?.(pl.wsPath) },
         }, `${dirLabel(pl.wsPath)}（${stText}${pl.failing > 0 ? activeCopy().starfield.failSuffix(pl.failing) : ''}）`)
       })),
     /* V18.3：bfpanel 战线弹窗退役——战线清单并入聚焦态钉住悬停卡（frontRowsHtml） */

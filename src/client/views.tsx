@@ -2721,7 +2721,12 @@ export function warView(services: ClientServicesFace): () => ReactNode {
       .map(ws => wsKeyOf(ws))
       .filter((k): k is string => k !== null))]
     // V14 composer 星球选择器选项（现存星球，创建序；名称=目录名/未分组）。
-    const bfChoices = wsOrder.map(k => ({ key: k, name: bfNameOf(k) }))
+    // 合成沙盒的「未分组」伪键（__war_ungrouped__）不进选项——它是星域聚合
+    // 键不是工作区路径，选了会把伪键拼进【星球：…】协议标记，大副侧当路径用
+    //（sd 审计回流）。
+    const bfChoices = wsOrder
+      .filter(k => k !== UNGROUPED_WS_KEY)
+      .map(k => ({ key: k, name: bfNameOf(k) }))
     // critique P0 根修：禁区百分比以【板宽】为分母（winW 是窗口宽——宿主侧栏吃掉
     // ~280px，1720 窗口板宽仅 1440，按窗口算低估舱占位 3%，行星照样被盖）。
     // 板宽/坞高改实测（resize 随动），星域布局随真实禁区落位。

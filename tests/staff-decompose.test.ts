@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { appendDirectiveEvent, foldDirectives, loadDirectives, type DirectiveEvent } from '../src/directives.ts'
 import { readFeatureFlags, type FeatureFlags } from '../src/flags.ts'
@@ -133,6 +133,30 @@ test('war_publish_chain 硬门与成链：无拆解/未批均拒；批准后顺�
     await assert.rejects(execTool(deps, 'war_publish_chain', { command_id: 'cmd-c' }), /不要重复发布/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('war_publish_chain 绑定工作区（bound）：成链落指定路径——旧代码三元式引用块内 abs 必抛 ReferenceError（sd 审计回流回归钉）', async () => {
+  const dir = tmpDir()
+  const bound = mkdtempSync(join(tmpdir(), 'warroom-bound-ws-'))
+  try {
+    seedCommand(dir, 'cmd-b', '把配置层重构成声明式')
+    const deps = makeDeps(dir, FLAG_ON_ALL)
+    await execTool(deps, 'war_decompose', { command_id: 'cmd-b', plan: '目标迁移配置层，步骤一二三，工作区主仓，风险回滚 git。', tasks: SPECS })
+    appendDirectiveEvent(dir, { type: 'directive_plan_approved', ts: 't3', directiveId: 'cmd-b' })
+    const out = await execTool(deps, 'war_publish_chain', { command_id: 'cmd-b', workspace: bound }) as { taskIds: string[]; workspacePath: string }
+    assert.equal(out.workspacePath, resolve(bound))
+    for (const id of out.taskIds) {
+      const log = readFileSync(join(dir, 'campaigns', `${id}.jsonl`), 'utf8').split('\n').filter(l => l.trim() !== '').map(l => JSON.parse(l) as Record<string, unknown>)
+      assert.equal(log.find(l => l.type === 'task_published')!.workspacePath, resolve(bound))
+      assert.equal(log.find(l => l.type === 'task_published')!.workspaceKind, 'bound')
+    }
+    // 星球注册链级一次（旧代码缩进错位在循环内逐环注册——幂等但纯浪费）。
+    const planetEvents = readFileSync(join(dir, 'planets.jsonl'), 'utf8').split('\n').filter(l => l.trim() !== '').map(l => JSON.parse(l) as Record<string, unknown>)
+    assert.equal(planetEvents.filter(e => e.path === resolve(bound)).length, 1)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+    rmSync(bound, { recursive: true, force: true })
   }
 })
 

@@ -1225,6 +1225,10 @@ function FocusPage(props: { cmd: BoardCommand; chain: BoardTask[]; statuses: Map
       return createElement('div', { key, className: 'war-subdetail' },
         createElement('div', { className: 'war-subdetail-title' }, `${fp.planTitle}（${copy.planTitle[(cmd.plan as { status: 'pending' | 'approved' | 'rejected' }).status]}）`),
         pending ? createElement('div', { className: 'war-sub-value' }, fp.planPending) : null,
+        // sd 对齐：驳回理由随 fold 送达板面（此前只在 live push 里闪现一次，板上看不见）。
+        cmd.plan?.status === 'rejected' && cmd.plan.reason !== null && cmd.plan.reason !== ''
+          ? createElement('div', { className: 'war-sub-value' }, fp.planRejectedNote(cmd.plan.reason))
+          : null,
         createElement('div', { className: 'war-sub-value war-plan-body' }, reportBody((cmd.plan as { text: string }).text)),
         pending
           ? subActions([

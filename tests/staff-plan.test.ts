@@ -58,6 +58,11 @@ test('fold：plan_opened 覆盖待批；approved/rejected 改判；重呈回到 
   assert.equal(d!.plan!.text, '第二稿（拆小）')
   assert.equal(d!.plan!.status, 'approved')
   assert.equal(d!.plan!.decidedAt, 't4')
+  // sd 对齐：驳回理由留 fold（与 gradeReason/cancelledReason 同款）；重呈重建即清。
+  const [dr] = foldDirectives(events.slice(0, 3))
+  assert.equal(dr!.plan!.status, 'rejected')
+  assert.equal(dr!.plan!.reason, '步子太大')
+  assert.equal(d!.plan!.reason, undefined)
   // 终态守卫：approved（命令）后的 plan_opened 被忽略。
   const [d2] = foldDirectives([
     ...events,

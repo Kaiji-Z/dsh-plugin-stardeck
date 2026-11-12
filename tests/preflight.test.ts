@@ -16,15 +16,15 @@ function cmd(p: { grade?: BoardCommand['grade']; status?: BoardCommand['status']
 
 test('stalledOnUserPlan：L1/L2 且计划未获批 → 会停在等人', () => {
   assert.equal(stalledOnUserPlan(cmd({ grade: 'L1' })), true) // 计划还没呈报（迟早停）
-  assert.equal(stalledOnUserPlan(cmd({ grade: 'L2', plan: { text: 'p', status: 'pending', decidedAt: null } })), true)
-  assert.equal(stalledOnUserPlan(cmd({ grade: 'L1', plan: { text: 'p', status: 'rejected', decidedAt: 'x' } })), true) // 重呈中，下一站还是等用户
+  assert.equal(stalledOnUserPlan(cmd({ grade: 'L2', plan: { text: 'p', status: 'pending', decidedAt: null, reason: null } })), true)
+  assert.equal(stalledOnUserPlan(cmd({ grade: 'L1', plan: { text: 'p', status: 'rejected', decidedAt: 'x', reason: null } })), true) // 重呈中，下一站还是等用户
 })
 
 test('stalledOnUserPlan：L0/未分诊/计划已批/终态 → 不停', () => {
   assert.equal(stalledOnUserPlan(cmd({ grade: 'L0' })), false)
   assert.equal(stalledOnUserPlan(cmd({})), false)
-  assert.equal(stalledOnUserPlan(cmd({ grade: 'L1', plan: { text: 'p', status: 'approved', decidedAt: 'x' } })), false)
-  assert.equal(stalledOnUserPlan(cmd({ grade: 'L1', status: 'approved', plan: { text: 'p', status: 'approved', decidedAt: 'x' } })), false)
+  assert.equal(stalledOnUserPlan(cmd({ grade: 'L1', plan: { text: 'p', status: 'approved', decidedAt: 'x', reason: null } })), false)
+  assert.equal(stalledOnUserPlan(cmd({ grade: 'L1', status: 'approved', plan: { text: 'p', status: 'approved', decidedAt: 'x', reason: null } })), false)
   assert.equal(stalledOnUserPlan(cmd({ grade: 'L1', status: 'cancelled' })), false)
 })
 

@@ -64,8 +64,8 @@ export interface BoardCommand {
   gradeReason: string | null
   gradeConfidence: number | null
   regrades: number
-  /** V5-R3 计划态（未呈报为 null）。 */
-  plan: { text: string; status: 'pending' | 'approved' | 'rejected'; decidedAt: string | null } | null
+  /** V5-R3 计划态（未呈报为 null；rejected 带 reason=舰长驳回理由）。 */
+  plan: { text: string; status: 'pending' | 'approved' | 'rejected'; decidedAt: string | null; reason: string | null } | null
   /** V9.2 定时下达（未定时为 null；dispatchedAt 空 = 待发，nextRunAt 为下次触发）。 */
   schedule: { cron: string; dispatchedAt: string | null; nextRunAt: string | null } | null
   /** V10 战线链身份（服务端 foldChains 单点计算；初代也给对象，generation=1）。 */

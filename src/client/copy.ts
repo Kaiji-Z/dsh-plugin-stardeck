@@ -330,6 +330,8 @@ export interface WarCopy {
     configText: string
     planTitle: string
     planPending: string
+    /** 计划被驳回时的理由行（舰长意见随 fold 送达板面；sd 对齐）。 */
+    planRejectedNote: (reason: string) => string
     planEnterSession: string
     taskGhostPlanning: string
     taskGhostApproved: string
@@ -836,6 +838,7 @@ export const warCopy: WarCopy = {
     configRegrade: '改档',
     planTitle: '最终计划',
     planPending: '正在计划中——参谋还在写这份计划，进任务会话可以追问或补充。',
+    planRejectedNote: reason => `舰长意见：${reason}`,
     planEnterSession: '进入任务会话',
     taskGhostPlanning: '正在计划中——点开看呈批中的计划原文',
     taskGhostApproved: '计划已批准，任务即将发布——点开看计划原文',
@@ -1342,6 +1345,7 @@ export const plainCopy: WarCopy = {
     configRegrade: '改档',
     planTitle: '最终计划',
     planPending: '正在计划中——规划 Agent 还在写这份计划，进任务会话可以追问或补充。',
+    planRejectedNote: reason => `你的意见：${reason}`,
     planEnterSession: '进入任务会话',
     taskGhostPlanning: '正在计划中——点开看待批的计划原文',
     taskGhostApproved: '计划已批准，任务马上发布——点开看计划原文',

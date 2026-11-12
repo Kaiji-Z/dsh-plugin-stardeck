@@ -54,8 +54,9 @@ export interface Directive {
   gradeConfidence?: number
   /** 舰长改档次数（审计）。 */
   regrades?: number
-  /** V5-R3 计划态：当前待批/已批/被驳的计划（最新一次呈报）。 */
-  plan?: { text: string; status: 'pending' | 'approved' | 'rejected'; decidedAt?: string }
+  /** V5-R3 计划态：当前待批/已批/被驳的计划（最新一次呈报）。reason=驳回理由
+   *  （舰长意见——live push 之外，fold/板投影也读得到；重呈重建即清；sd 对齐）。 */
+  plan?: { text: string; status: 'pending' | 'approved' | 'rejected'; decidedAt?: string; reason?: string }
   /** V6 命令拆解（flag staff-decompose）：大副呈批的结构化拆解（最新一稿）。
    *  plan 卡走既有计划态；本字段是机器可读的子任务书，成链发布时逐个落地。 */
   decomposition?: { plan: string; tasks: Array<{ title: string; brief: string; acceptance: string }> }
@@ -212,6 +213,7 @@ export function foldDirectives(events: ReadonlyArray<DirectiveEvent>): Directive
         if (current.plan !== undefined && current.plan.status === 'pending') {
           current.plan.status = 'rejected'
           current.plan.decidedAt = event.ts
+          current.plan.reason = event.reason // sd 对齐：与 gradeReason/cancelledReason 同款留 fold
         }
         break
       case 'directive_approved':

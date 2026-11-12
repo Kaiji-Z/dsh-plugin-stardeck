@@ -349,8 +349,8 @@ export function directiveProjection(stateDir: string): Record<string, unknown>[]
       gradeReason: d.gradeReason ?? null,
       gradeConfidence: d.gradeConfidence ?? null,
       regrades: d.regrades ?? 0,
-      // V5-R3 计划态：当前计划文本与判定状态（未呈报为 null）。
-      plan: d.plan === undefined ? null : { text: d.plan.text, status: d.plan.status, decidedAt: d.plan.decidedAt ?? null },
+      // V5-R3 计划态：当前计划文本与判定状态（未呈报为 null）；rejected 带驳回理由。
+      plan: d.plan === undefined ? null : { text: d.plan.text, status: d.plan.status, decidedAt: d.plan.decidedAt ?? null, reason: d.plan.reason ?? null },
       // V9.2 定时下达（未定时为 null）。
       schedule: d.schedule === undefined
         ? null
@@ -393,7 +393,7 @@ export function traceProjection(
       id: d.id, text: d.text, name: d.name ?? null, createdAt: d.createdAt, status: d.status,
       staffSessionId: d.staffSessionId ?? null, taskId: d.taskId ?? null,
       grade: d.grade ?? null, gradeReason: d.gradeReason ?? null,
-      plan: d.plan === undefined ? null : { status: d.plan.status, text: d.plan.text },
+      plan: d.plan === undefined ? null : { status: d.plan.status, text: d.plan.text, reason: d.plan.reason ?? null },
       schedule: d.schedule === undefined ? null : { cron: d.schedule.cron, dispatchedAt: d.schedule.dispatchedAt ?? null },
       continuation: d.continuation === undefined ? null : { mode: d.continuation.mode, parentId: d.continuation.parentId },
       cancelledReason: d.cancelledReason ?? null,

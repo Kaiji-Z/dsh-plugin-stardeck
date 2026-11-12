@@ -31,7 +31,7 @@ function task(partial: Partial<BoardTask>): BoardTask {
 test('四类来源聚合：talking 命令→答澄清、计划待批→批计划、reported→翻任务回报、failed→决重试', () => {
   const commands = [
     cmd({ commandId: 'c-talk', status: 'talking' }),
-    cmd({ commandId: 'c-plan', plan: { text: '计划', status: 'pending', decidedAt: null } }),
+    cmd({ commandId: 'c-plan', plan: { text: '计划', status: 'pending', decidedAt: null, reason: null } }),
     cmd({ commandId: 'c-idle', status: 'received' }), // received 不进收件箱（等大副，不是等舰长）
   ]
   const tasks = [

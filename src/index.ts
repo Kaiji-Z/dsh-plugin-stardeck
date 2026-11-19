@@ -490,6 +490,13 @@ export function apply(ctx: Context, config: Config): void {
   // B1-件⑤：宿主 agents 面（get=活体判据 / resume=冷会话续命）——cordis inject
   // 捕获是唯一合法访问（R1 K13），先立 ref 后建征召器（面晚绑定经 getter 读）。
   const agentsFaceRef: { face?: { get(id: string): unknown; resume?(options: { resumeSessionId: string }): Promise<unknown> } } = {}
+  // rc.5 subagents 适配（同款晚绑定 ref）：persona→agentPreset（dsh-persona 行，
+  // 懒注册+内容哈希缓存）/ tool deny→子代理 agent.ctx 的 tools.restrict。两者都
+  // 在下方 agents+presets inject 块里实现；tools 侧经 deps 两钩子消费。
+  const troopCompositionRef: {
+    presetFor?: (persona: string) => Promise<string | null>
+    restrictChild?: (childId: string, deny: string[]) => void
+  } = {}
   const commander = createConscriptor({
     store,
     stateDir,
@@ -529,6 +536,9 @@ export function apply(ctx: Context, config: Config): void {
     },
     warRoot,
     workspaceRoot,
+    // rc.5 适配钩子（面晚绑定；缺席时 tools 侧走降级路径并 loud）。
+    troopCompositionPreset: async persona => troopCompositionRef.presetFor?.(persona) ?? null,
+    restrictChildTools: (childId, deny) => { troopCompositionRef.restrictChild?.(childId, deny) },
     // 开发期默认全开（DEFAULT_ON + env/extraFeatures 覆盖）。staff-auto-close
     // 默认 OFF——舰长令 2026-09-01：所有回报强制人工验收，见 flags.ts 政策注。
     flags: runtimeFlags(process.env, config.extraFeatures),
@@ -809,19 +819,86 @@ export function apply(ctx: Context, config: Config): void {
       try { return faces.agentDefaultModel.currentSelection() } catch { return { provider: '', model: '' } }
     }
     /** e2e 实弹第二抓：不带 preset 装配的 agent 只有全局插件工具（study/warroom），
-     * 无 write/bash 核心工具集——rc.2 旧径经 composeAgent(presets.mount) 装配。
-     * presets 面缺席时诚实降级为裸组合（与 rc.2 同款兜底）。 */
+     *  无 write/bash 核心工具集——rc.2 旧径经 composeAgent(presets.mount) 装配。
+     *  presets 面缺席时诚实降级为裸组合（与 rc.2 同款兜底）。 */
+    const presetsFace = (boundCtx as unknown as { get(name: string): {
+      resolve(id?: string): Promise<{ id: string }>
+      mount(agentCtx: unknown, id?: string): Promise<unknown>
+      /** rc.5：程序化注册（旧宿主无此法——只在 startActivation 新面上被触达）。 */
+      register?(definition: { id: string; name?: string; plugins: ReadonlyArray<{ id?: string; name: string; config?: Record<string, unknown> }> }): Promise<() => Promise<void>>
+    } | undefined }).get('agentPresets')
     const composeAgent = async (): Promise<{ agentPreset?: string; setup: (agentCtx: unknown) => Promise<void> }> => {
-      const presets = (boundCtx as unknown as { get(name: string): { resolve(id?: string): Promise<{ id: string }>; mount(agentCtx: unknown, id?: string): Promise<unknown> } | undefined }).get('agentPresets')
-      if (presets === undefined) return { setup: async () => {} }
+      if (presetsFace === undefined) return { setup: async () => {} }
       try {
-        const resolved = await presets.resolve(undefined)
+        const resolved = await presetsFace.resolve(undefined)
         return {
           agentPreset: resolved.id,
-          setup: async (agentCtx: unknown) => { await presets.mount(agentCtx, resolved.id) },
+          setup: async (agentCtx: unknown) => { await presetsFace.mount(agentCtx, resolved.id) },
         }
       } catch {
         return { setup: async () => {} }
+      }
+    }
+    // rc.5 适配①：troop persona → agentPreset（dsh-persona 行，scope-only 正典——
+    // preset 拥 persona 是宿主新教义）。按 persona 内容做 FNV-1a 哈希稳定 id，
+    // 同内容复用已注册 preset；注册失败返回 null（tools 侧降级拼 prompt）。
+    if (presetsFace?.register !== undefined) {
+      const register = presetsFace.register.bind(presetsFace)
+      const presetByPersona = new Map<string, string>()
+      troopCompositionRef.presetFor = async (persona: string) => {
+        if (persona.trim() === '') return null
+        const cached = presetByPersona.get(persona)
+        if (cached !== undefined) return cached
+        let hash = 0x811c9dc5
+        for (let i = 0; i < persona.length; i++) {
+          hash ^= persona.charCodeAt(i)
+          hash = Math.imul(hash, 0x01000193) >>> 0
+        }
+        const id = `warroom-troop-${hash.toString(36)}`
+        try {
+          const dispose = await register({ id, plugins: [{ id: 'persona', name: '@deepseek-ai/dsh-persona', config: { prefix: persona } }] })
+          ctx.effect(() => () => { void dispose() }, `warroom.troopPreset(${id})`)
+          presetByPersona.set(persona, id)
+          return id
+        } catch (err) {
+          console.warn(`[warroom] troop preset 注册失败（${id}）：${String(err)}——该组员 persona 将降级拼进 prompt。`)
+          return null
+        }
+      }
+    }
+    // rc.5 适配②：troop tool deny → 子代理 agent.ctx 的 tools.restrict（scoped
+    // 正典——restrict 必须在 agent 作用域里调；两主人纪律：disposer 同时挂本插件
+    // effect）。B12 同款 unknown-name 裁剪重试（restrict 的校验错误面同源）。
+    troopCompositionRef.restrictChild = (childId: string, deny: string[]) => {
+      if (deny.length === 0) return
+      const agent = faces.agents.get(childId) as { ctx?: { tools?: { restrict(filter: { deny: string[] }): (() => void) | void } } } | undefined
+      const restrict = agent?.ctx?.tools?.restrict
+      if (restrict === undefined) {
+        console.warn(`[warroom] 子代理 ${childId} 的 agent.ctx.tools.restrict 面缺席——只读剥夺未生效（rc.5 适配面未接齐，请核对宿主版本）。`)
+        return
+      }
+      const apply = (list: string[]): (() => void) | undefined => {
+        try {
+          return restrict({ deny: list }) ?? undefined
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          const known = /known global tools: (.+)$/.exec(message)?.[1]
+          if (known === undefined) throw err
+          const knownSet = new Set(known.split(',').map(s => s.trim()))
+          const trimmed = list.filter(name => knownSet.has(name))
+          if (trimmed.length === list.length) throw err
+          if (trimmed.length === 0) {
+            console.warn(`[warroom] tools.restrict fail-open：宿主不认识 deny 名单的任何名字（deny=${list.join(',')}）——只读剥夺未生效（宿主工具名漂移，请核对 sandbox 名单）。`)
+            return undefined
+          }
+          return restrict({ deny: trimmed })
+        }
+      }
+      try {
+        const dispose = apply(deny)
+        if (dispose !== undefined) ctx.effect(() => () => { dispose() }, `warroom.troopDeny(${childId})`)
+      } catch (err) {
+        console.warn(`[warroom] 子代理 ${childId} tools.restrict 失败（fail-open，组员带全量工具出动）：${String(err)}`)
       }
     }
     const ok = <T,>(value: T): { result: { ok: true; value: T } } => ({ result: { ok: true, value } })

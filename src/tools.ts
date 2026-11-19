@@ -36,9 +36,16 @@ import { armGoalForTask, openDisarmedGoalForDirective, settleGoalMentioning, typ
 import { isAutoWorkspace } from './workspace.ts'
 import { QUALITY_TIERS, type CampaignState, type Deliverable, type DescendantFace, type QualityTier, type SubmissionEvidence, type SubtaskRecord, type UnitRecord, type UnitSpec, type WarEvent } from './types.ts'
 
-/** Structural slice of `ctx.subagents` (SubagentRuntime) — the operations warroom uses. */
+/** Structural slice of `ctx.subagents` (SubagentRuntime) — the operations warroom uses.
+ *  双面（dsh 0.2.2-rc.5 适配，2026-11-19）：旧面 startContinuable（0.2.0-rc.2 及
+ *  以前，spec.request 携 persona/toolFilter）与新面 startActivation（rc.5 起 spec
+ *  摊平 + delivery 必填，persona/toolFilter 归 preset/作用域 restrict——见
+ *  startWithToolFilter 与 index.ts 的 troopComposition 装配）。两法都设为可选，
+ *  运行时择在场者用；followup 在 0.1.5→0.2.0 跳版时已改名 sendMessage（潜伏债
+ *  修复，两版同形）。 */
 export interface SubagentsServiceFace {
-  startContinuable(spec: {
+  /** 旧面（0.2.0-rc.2 及以前）。 */
+  startContinuable?(spec: {
     provider: string
     label: string
     request: {
@@ -52,7 +59,22 @@ export interface SubagentsServiceFace {
     }
     signal: AbortSignal
   }): Promise<{ childId: string; messageId: string }>
-  followup(parent: unknown, childId: string, content: ReadonlyArray<{ type: 'text'; text: string }>, options: unknown): Promise<unknown>
+  /** 新面（0.2.2-rc.5 起）：SubagentStartRequest 字段摊平到顶层 + delivery 必填
+   *  （'parent'=结果送达父会话模型，与旧 continuable 语义对位）。 */
+  startActivation?(spec: {
+    provider: string
+    label: string
+    prompt: ReadonlyArray<{ type: 'text'; text: string }>
+    parent: unknown
+    maxDepth?: number
+    agentOptions?: { provider: string; model: string }
+    agentPreset?: string
+    delivery: 'parent' | 'caller'
+    signal: AbortSignal
+  }): Promise<{ childId: string; messageId?: string }>
+  /** 对子代理追加输入（0.1.x 名 followup；0.2.0-rc.2 起改名 sendMessage，两版
+   *  同形——source 由宿主从 sender 自建，options 只需 signal）。 */
+  sendMessage(sender: unknown, targetId: string, content: ReadonlyArray<{ type: 'text'; text: string }>, options: { signal: AbortSignal }): Promise<unknown>
   interrupt(targetSessionId: string, authority: unknown): void
   listDescendants(rootSessionId: string, signal?: AbortSignal): Promise<ReadonlyArray<DescendantFace>>
 }
@@ -151,8 +173,15 @@ export interface WarToolsDeps {
    * 缺席 → goal 代管诚实降级（不武装/不结算，账本记不了就跳过）。 */
   goals?: () => GoalsFace | undefined
   /** V5-R4 (staff-wake)：结算点唤醒大副（分级推+去抖在引擎侧）。旗关或
-   * 未接线 → 无唤醒（行为等价）。 */
+   *  未接线 → 无唤醒（行为等价）。 */
   wakeStaff?: (taskId: string, kind: 'reported' | 'failed', detail: string) => void
+  /** rc.5 subagents 适配：按 persona 文本注册（或命中缓存）一个 dsh-persona 行
+   *  的 agentPreset，返回 preset id；面缺席/注册失败返回 null（调用侧降级把
+   *  persona 拼进 prompt）。接线见 index.ts 的 troopComposition 装配。 */
+  troopCompositionPreset?: (persona: string) => Promise<string | null>
+  /** rc.5 subagents 适配：spawn 后在子代理 agent.ctx 上 tools.restrict({deny})
+   *  （B12 同款 unknown-name 裁剪在实现内；失败 fail-open + loud）。 */
+  restrictChildTools?: (childId: string, deny: string[]) => void
 }
 
 function requireAgent(exec: WarToolExec): { id: string } {
@@ -180,6 +209,13 @@ function findUnit(roster: Roster, name: string): UnitSpec | undefined {
  * unknown names outright (live R8 catch: str_replace_editor/bash/jobs absent
  * here). On that exact failure, trim the deny list to the deployment's known
  * tools — parsed from the error's own roster — and retry once.
+ *
+ * 双面（rc.5 适配）：startActivation 在场走新面——persona 不进 spec（优先经
+ * deps.troopCompositionPreset 注册 dsh-persona 行取 agentPreset id；钩子缺席/
+ * 注册失败则 persona 拼进 prompt 首部降级 + loud 一行），tool deny 不进 spec
+ * （spawn 后经 deps.restrictChildTools 在子代理 agent.ctx 上 tools.restrict，
+ * B12 同款 fail-open 裁剪在钩子内）。旧面 startContinuable 原样保留（0.2.0-rc.2
+ * 宿主继续走 request.persona/toolFilter）。
  */
 async function startWithToolFilter(deps: WarToolsDeps, spec: {
   label: string
@@ -190,6 +226,31 @@ async function startWithToolFilter(deps: WarToolsDeps, spec: {
   agentOptions?: { provider: string; model: string }
   signal: AbortSignal
 }): Promise<{ childId: string }> {
+  if (typeof deps.subagents.startActivation === 'function') {
+    let presetId: string | null = null
+    if (deps.troopCompositionPreset !== undefined) presetId = await deps.troopCompositionPreset(spec.persona)
+    if (presetId === null) {
+      console.warn(`[warroom] troop preset 面缺席/注册失败：${spec.label} 的 persona 将拼进 prompt 首部降级（rc.5 起宿主 spawn spec 不再收 persona 字段）。`)
+    }
+    const prompt = presetId === null
+      ? [{ type: 'text' as const, text: `${spec.persona}\n\n${spec.prompt[0]?.text ?? ''}` }, ...spec.prompt.slice(1)]
+      : spec.prompt
+    const started = await deps.subagents.startActivation({
+      provider: 'spawn',
+      label: spec.label,
+      prompt,
+      parent: spec.commander,
+      maxDepth: 2,
+      ...(spec.agentOptions !== undefined ? { agentOptions: spec.agentOptions } : {}),
+      ...(presetId !== null ? { agentPreset: presetId } : {}),
+      delivery: 'parent',
+      signal: spec.signal,
+    })
+    deps.restrictChildTools?.(started.childId, spec.deny)
+    return started
+  }
+  const startContinuable = deps.subagents.startContinuable
+  if (startContinuable === undefined) throw new Error('宿主 subagents 面缺席：既无 startActivation（0.2.2-rc.5+）也无 startContinuable（0.2.0-rc.2）——外勤组员无法出动。')
   const base = {
     provider: 'spawn',
     label: spec.label,
@@ -203,7 +264,7 @@ async function startWithToolFilter(deps: WarToolsDeps, spec: {
     signal: spec.signal,
   }
   try {
-    return await deps.subagents.startContinuable({ ...base, request: { ...base.request, toolFilter: { deny: spec.deny } } })
+    return await startContinuable({ ...base, request: { ...base.request, toolFilter: { deny: spec.deny } } })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     const known = /known global tools: (.+)$/.exec(message)?.[1]
@@ -218,7 +279,7 @@ async function startWithToolFilter(deps: WarToolsDeps, spec: {
     if (trimmed.length === 0 && spec.deny.length > 0) {
       console.warn(`[warroom] toolFilter fail-open：宿主不认识 deny 名单的任何名字（deny=${spec.deny.join(',')}）——只读剥夺未生效，${spec.label} 将带全量工具出动（宿主工具名漂移，请核对 sandbox 名单）。`)
     }
-    return await deps.subagents.startContinuable({ ...base, request: { ...base.request, toolFilter: { deny: trimmed } } })
+    return await startContinuable({ ...base, request: { ...base.request, toolFilter: { deny: trimmed } } })
   }
 }
 
@@ -1000,10 +1061,7 @@ export function warTools(deps: WarToolsDeps) {
       if (unit === undefined) throw new Error(`任务 ${args.task_id} 中没有外勤组员 ${args.child_id}。可用 war_status 查外勤组员树。`)
       if (unit.recalled !== undefined) throw new Error(`${unit.label} ${args.child_id} 已撤编，无法追加命令；请重新加派组员。`)
       if (unit.settled !== undefined) throw new Error(`${unit.label} ${args.child_id} 已收队，无法追加命令；如需续战请重新加派组员。`)
-      await deps.subagents.followup(commander, args.child_id, [{ type: 'text', text: args.order }], {
-        source: { kind: 'coordinator', form: 'relay', senderSessionId: commander.id },
-        signal: exec.signal,
-      })
+      await deps.subagents.sendMessage(commander, args.child_id, [{ type: 'text', text: args.order }], { signal: exec.signal })
       appendEvent(deps.stateDir, { type: 'order_sent', ts: new Date().toISOString(), campaignId: args.task_id, childId: args.child_id, order: args.order })
       return { childId: args.child_id, order: args.order }
     },
@@ -1252,10 +1310,7 @@ export function warTools(deps: WarToolsDeps) {
         const parent = callerIsCommander ? caller : (commanderSession !== undefined ? deps.resolveAgent?.(commanderSession) : undefined)
         if (parent !== undefined) {
           try {
-            await deps.subagents.followup(parent, target.childId, [{ type: 'text', text: `【组员直讯】${text}` }], {
-              source: { kind: 'coordinator', form: 'relay', senderSessionId: caller.id },
-              signal: exec.signal,
-            })
+            await deps.subagents.sendMessage(parent, target.childId, [{ type: 'text', text: `【组员直讯】${text}` }], { signal: exec.signal })
             appendEvent(deps.stateDir, { type: 'message_delivered', ts: new Date().toISOString(), campaignId: args.task_id, messageId })
             return { messageId, to: toId, delivered: true }
           } catch {
@@ -1606,10 +1661,7 @@ export async function kickIdleTroops(deps: WarToolsDeps, campaignId: string, sig
       '陈旧令牌报错 = 所有权已变，停止该子任务。',
     ].join('\n')
     try {
-      await deps.subagents.followup(parent, d.id, [{ type: 'text', text: brief }], {
-        source: { kind: 'coordinator', form: 'relay', senderSessionId: commanderSession },
-        ...(signal !== undefined ? { signal } : {}),
-      })
+      await deps.subagents.sendMessage(parent, d.id, [{ type: 'text', text: brief }], { signal: signal ?? new AbortController().signal })
       dispatched += 1
     } catch {
       // Wake failed: return the subtask to the pool so another troop can take it.

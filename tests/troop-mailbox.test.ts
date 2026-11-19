@@ -21,14 +21,15 @@ function recruit(dir: string): void {
   appendEvent(dir, { type: 'unit_deployed', ts: 't4', campaignId: 'c1', childId: 'child-b', unitName: 'scribe', label: '文书兵', mission: 'm', front: 'docs', writes: true })
 }
 
-/** Fake subagents recording every followup (parent identity included). */
+/** Fake subagents recording every sendMessage (parent identity included)——0.2.0
+ *  起宿主面名即 sendMessage（旧名 followup 已退役，潜伏债修复回归面）。 */
 function fakeSubagents(): { face: SubagentsServiceFace; followups: Array<{ parent: { id?: string }; childId: string; text: string }> } {
   const followups: Array<{ parent: { id?: string }; childId: string; text: string }> = []
   return {
     followups,
     face: {
       async startContinuable() { return { childId: 'child-x', messageId: 'm' } },
-      async followup(parent, childId, content) {
+      async sendMessage(parent, childId, content) {
         followups.push({ parent: parent as { id?: string }, childId, text: content.map(c => c.text).join(' ') })
         return {}
       },

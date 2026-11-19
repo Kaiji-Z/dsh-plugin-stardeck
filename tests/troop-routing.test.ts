@@ -70,7 +70,7 @@ function fakeSubagents(): { face: SubagentsServiceFace; starts: Array<{ request:
         starts.push(spec as { request: { agentOptions?: { provider: string; model: string } } })
         return { childId: `child-${starts.length}`, messageId: 'm1' }
       },
-      async followup() { return {} },
+      async sendMessage() { return {} },
       interrupt() {},
       async listDescendants() { return [] },
     },

@@ -14,6 +14,12 @@ package.json 落地时去 v 前缀（`0.18.9-6`，semver 预发布段承载刀�
 - 验收证据（测试数 / shooter / 探针）随条目附注，是本项目的交付纪律。
 - **发版门**：平时交付只在 `[Unreleased]` 积条目，版本号（package.json 与版本头）保持不动；明说「发版」时才落版本头、推进版本号。
 
+## [Unreleased]
+
+### Fixed
+
+- **dsh 0.2.2-rc.5 subagents 面适配（2026-11-19 静态审计三件全修，双面适配器——当前 0.2.0-rc.2 宿主与 rc.5 新宿主通吃）**：审计结论（对照 `dsh-v0.2.0-rc.2→dsh-v0.2.2-rc.5` 两 tag 的 api-catalog+源码，其余 12 个宿主消费面全兼容）subagents 面三件破坏：①**潜伏债（0.2.0-rc.2 起就断）**——宿主在 0.1.5→0.2.0 跳版时把 `subagents.followup` 改名 `sendMessage`（两版源码均无 followup），本仓三调用点（war_orders 追加命令/组员直讯/收官接力派子任务）一直在打空方法——追加命令直接报错、直讯静默降级、接力被 catch 吞成「回池」循环；0.20.6 静态审计漏网（只审了 M1/M2 面），实弹链走 war_claim/submit 主链不经过作战互动三路。修=纯改名 `sendMessage(sender,targetId,content,{signal})`（两版同形；source 由宿主从 sender 自建，旧 options.source 本就被忽略）。②**startContinuable→startActivation**（rc.5 起 spec 从 `{provider,label,request,signal}` 摊平为顶层字段+必填 `delivery:'parent'|'caller'`）→ startWithToolFilter 双面化：`startActivation` 在场走新面（delivery='parent' 对位旧 continuable 语义），缺席回落旧面原样（0.2.0-rc.2 宿主不断）；两面全缺席诚实报错。③**spawn spec 的 persona/toolFilter 整体退役**（rc.5 教义「preset owns persona and tool composition」）→ persona 优先经 `agentPresets.register` 懒注册 dsh-persona 行（persona 内容 FNV-1a 哈希稳定 id+缓存，disposer 挂插件 effect），取 agentPreset id 进新面 spec；面缺席/注册失败降级拼进 prompt 首部+loud。tool deny 不进 spec——spawn 后经 `agents.get(childId).ctx.tools.restrict({deny})`（scoped 正典，两主人纪律 disposer 双挂；B12 同款 unknown-name 裁剪 fail-open 在实现内）。新增 `tests/subagents-dualface.test.ts` 四钉（新面 spec 形状+agentPreset 透传+restrict 钩子/preset null 降级拼 prompt/war_orders 走 sendMessage/旧面 spec 原样），五个旧假面同步改名 sendMessage；verify 针脚 `startContinuable` 双关存活（双面代码仍含旧面字面量）。`pnpm verify` PASS 370/370。挂账：rc.5 实弹复检待宿主 checkout 升级（v5-spike+probe-host-020+作战互动三路实弹，0.20.6 轮 SOP）；审计全文沉淀记忆 dsh-022rc5-audit-2026-11-19。
+
 ## [0.20.7] - 2026-11-12
 
 ### Fixed

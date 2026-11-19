@@ -116,7 +116,7 @@ function tmpDir(): string {
 function fakeSubagents(): SubagentsServiceFace {
   return {
     async startContinuable() { return { childId: 'child-x', messageId: 'm1' } },
-    async followup() { return {} },
+    async sendMessage() { return {} },
     interrupt() {},
     async listDescendants() { return [] },
   }

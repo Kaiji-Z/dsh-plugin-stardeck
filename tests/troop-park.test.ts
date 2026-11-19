@@ -37,7 +37,7 @@ function fakeSubagents(opts: { idle?: string[] } = {}): Fake {
     idle,
     face: {
       async startContinuable() { return { childId: 'child-x', messageId: 'm' } },
-      async followup(_p, childId) { followups.push({ childId }) ; return {} },
+      async sendMessage(_p, childId) { followups.push({ childId }) ; return {} },
       interrupt() {},
       async listDescendants(): Promise<DescendantFace[]> {
         return idle.map(id => ({ kind: 'subagent', id, activity: 'inactive' as const, mode: 'continuable' as const }))
